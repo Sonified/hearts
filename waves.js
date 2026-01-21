@@ -31,6 +31,13 @@ class WaveEffect {
         this.frameCount = 0;
         this.scrollVelocity = 0;
         this.lastScrollY = 0;
+        // Idle detection
+        this.idleFrames = 0;
+        this.maxIdleFrames = 60; // ~1 second before idle mode
+        this.waveEnergy = 0;
+        this.energyDecay = 0.95;
+        // Frame rate limiting
+        this.lastFrameTime = 0;
     }
 
     init() {
@@ -49,7 +56,12 @@ class WaveEffect {
         document.addEventListener('visibilitychange', () => {
             this.isVisible = !document.hidden;
             if (this.isVisible && this.isInViewport) {
-                this.resumeAnimation();
+                // Reset state to avoid jumps
+                this.prevMouseX = null;
+                this.prevMouseY = null;
+                this.waveEnergy = 0; // Reset energy to prevent flash
+                // Delay resume to let browser settle
+                setTimeout(() => this.resumeAnimation(), 100);
             } else {
                 this.pauseAnimation();
             }
@@ -145,12 +157,12 @@ class WaveEffect {
         this.waveScene = new THREE.Scene();
         this.waveCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-        // Use FloatType directly - WebGL2 has built-in float texture support
+        // Use HalfFloatType for better performance (FloatType is slower)
         const rtOptions = {
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter,
             format: THREE.RGBAFormat,
-            type: THREE.FloatType
+            type: THREE.HalfFloatType
         };
 
         this.waveRenderTargets = [];
@@ -248,21 +260,26 @@ class WaveEffect {
         });
 
         // Update mouse position on scroll (canvas moves, mouse stays)
-        // Also track scroll velocity for wave generation
+        // Also track scroll velocity for wave generation - RAF throttled
+        let scrollRAF = null;
         document.addEventListener('scroll', () => {
-            updateMousePosition();
+            if (scrollRAF) return; // Skip if already pending
+            scrollRAF = requestAnimationFrame(() => {
+                updateMousePosition();
 
-            // Calculate scroll velocity for wave generation
-            const currentScrollY = window.scrollY;
-            this.scrollVelocity = Math.abs(currentScrollY - this.lastScrollY);
-            this.lastScrollY = currentScrollY;
-            this.isScrolling = true;
+                // Calculate scroll velocity for wave generation
+                const currentScrollY = window.scrollY;
+                this.scrollVelocity = Math.abs(currentScrollY - this.lastScrollY);
+                this.lastScrollY = currentScrollY;
+                this.isScrolling = true;
 
-            clearTimeout(this.scrollTimeout);
-            this.scrollTimeout = setTimeout(() => {
-                this.isScrolling = false;
-                this.scrollVelocity = 0;
-            }, 150);
+                clearTimeout(this.scrollTimeout);
+                this.scrollTimeout = setTimeout(() => {
+                    this.isScrolling = false;
+                    this.scrollVelocity = 0;
+                }, 150);
+                scrollRAF = null;
+            });
         }, { passive: true });
 
         document.addEventListener('mouseenter', (e) => {
@@ -320,6 +337,20 @@ class WaveEffect {
         if (forceStrength === 0 && this.scrollVelocity > 0) {
             const normalizedScrollVelocity = this.scrollVelocity / canvasHeight;
             forceStrength = normalizedScrollVelocity * this.config.waveForce * 30;
+        }
+
+        // Track wave energy for idle detection
+        if (forceStrength > 0) {
+            this.waveEnergy = Math.min(1, this.waveEnergy + forceStrength * 0.1);
+            this.idleFrames = 0;
+        } else {
+            this.waveEnergy *= this.energyDecay;
+            this.idleFrames++;
+        }
+
+        // Skip simulation entirely if waves have died down
+        if (this.waveEnergy < 0.001 && this.idleFrames > this.maxIdleFrames) {
+            return;
         }
 
         this.prevMouseX = this.mouseX;
@@ -380,6 +411,13 @@ class WaveEffect {
             return;
         }
         this.animationId = requestAnimationFrame(() => this.animate());
+
+        // Frame rate limiting - skip render if too soon (~60fps cap)
+        const now = performance.now();
+        const elapsed = now - this.lastFrameTime;
+        if (elapsed < 16) return;
+        this.lastFrameTime = now;
+
         this.render();
     }
 

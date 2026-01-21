@@ -70,9 +70,14 @@
             opacity: 0;
             transform: scale(1.1);
             animation: zoomFadeIn 2s ease-out forwards;
+            animation-play-state: paused; /* Prevent re-triggering on focus change */
             z-index: 1;
             will-change: transform, opacity;
             backface-visibility: hidden;
+        }
+
+        .hero-image.loaded {
+            animation-play-state: running;
         }
 
         .hero-text {
@@ -269,6 +274,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
+            z-index: 1; /* Stay above fixed starfield */
         }
 
         .image-text-container {
@@ -319,7 +326,7 @@
 
         .stat-item {
             display: grid;
-            grid-template-columns: 300px 1fr;
+            grid-template-columns: 400px 1fr;
             gap: 20px;
             align-items: end;
             margin-bottom: 50px;
@@ -602,18 +609,18 @@
 
     <section class="numbers-section">
         <div class="numbers-container">
-            <h2>By the numbers</h2>
+            <h2>EYU 2025 By the Numbers</h2>
             <div class="stat-item" data-delay="0">
                 <div class="stat-number" data-target="2">0</div>
                 <div class="stat-description">data streaming portals (volcanic and space data)</div>
             </div>
             <div class="stat-item" data-delay="200">
-                <div class="stat-number" data-target="1000">0</div>
+                <div class="stat-number" data-target="1000" data-suffix="+">0</div>
                 <div class="stat-description">attendees to the EYU 2025 exhibition</div>
             </div>
             <div class="stat-item" data-delay="400">
                 <div class="stat-number" data-target="2305204">0</div>
-                <div class="stat-description">volcanic data points streamed in real time (estimate)</div>
+                <div class="stat-description">volcanic data points streamed in real time</div>
             </div>
         </div>
     </section>
@@ -769,7 +776,7 @@
                         isVisible = entry.isIntersecting;
                         if (isVisible && !waveInterval) {
                             doWave();
-                            waveInterval = setInterval(doWave, 10000);
+                            waveInterval = setInterval(doWave, 7000);
                         } else if (!isVisible && waveInterval) {
                             clearInterval(waveInterval);
                             waveInterval = null;
@@ -781,7 +788,7 @@
 
                 // Do first wave, then repeat every 10 seconds
                 doWave();
-                waveInterval = setInterval(doWave, 10000);
+                waveInterval = setInterval(doWave, 7000);
             }
 
             // Start animation after browser has painted
@@ -820,6 +827,12 @@
             }, 50); // 50ms delay lets browser paint first
         })();
 
+        // Enable hero image animation (paused initially to prevent re-triggering on focus change)
+        const heroImage = document.querySelector('.hero-image');
+        if (heroImage) {
+            heroImage.classList.add('loaded');
+        }
+
         const scrollIndicator = document.getElementById('scrollIndicator');
 
         scrollIndicator.addEventListener('click', () => {
@@ -835,6 +848,7 @@
         (function initUnifiedScrollHandler() {
             let scrollRAF = null;
             let lastScrollY = 0;
+            let frameCount = 0; // For debouncing starfield parallax
 
             // Cache DOM elements
             const satelliteScrollContainer = document.getElementById('satelliteScrollContainer');
@@ -893,12 +907,15 @@
                     const tiltOffset = (sectionCenter - viewportCenter) / viewportHeight;
                     window.satelliteScrollTilt = tiltOffset * 1.2;
 
-                    // Starfield parallax
+                    // Starfield parallax - only update every 2 frames during fast scroll
                     if (starfieldBg && starfieldBg.classList.contains('visible')) {
-                        const maxOffset = viewportHeight * 0.25;
-                        const parallaxOffset = -containerTop * 0.12;
-                        const clampedOffset = Math.max(-maxOffset, Math.min(maxOffset, parallaxOffset));
-                        starfieldBg.style.transform = `translateY(${clampedOffset}px)`;
+                        frameCount++;
+                        if (frameCount % 2 === 0) {
+                            const maxOffset = viewportHeight * 0.25;
+                            const parallaxOffset = -containerTop * 0.12;
+                            const clampedOffset = Math.max(-maxOffset, Math.min(maxOffset, parallaxOffset));
+                            starfieldBg.style.transform = `translateY(${clampedOffset}px)`;
+                        }
                     }
                 }
 
@@ -924,6 +941,7 @@
         function animateCounter(element, target, duration = 1200) {
             const start = 0;
             const startTime = performance.now();
+            const suffix = element.dataset.suffix || '';
 
             function update(currentTime) {
                 const elapsed = currentTime - startTime;
@@ -931,12 +949,12 @@
                 const easedProgress = easeOutExpo(progress);
                 const current = Math.floor(start + (target - start) * easedProgress);
 
-                element.textContent = current.toLocaleString();
+                element.textContent = current.toLocaleString() + suffix;
 
                 if (progress < 1) {
                     requestAnimationFrame(update);
                 } else {
-                    element.textContent = target.toLocaleString();
+                    element.textContent = target.toLocaleString() + suffix;
                 }
             }
 
