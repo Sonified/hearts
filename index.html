@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEARTS Project</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            overflow-x: hidden;
+            background: #000;
+            color: #fff;
+        }
+
+        .hero {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom,
+                        rgba(0, 0, 0, 0.3) 0%,
+                        rgba(0, 0, 0, 0) 30%,
+                        rgba(0, 0, 0, 0) 70%,
+                        rgba(0, 0, 0, 0.4) 100%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .logo {
+            position: fixed;
+            top: 30px;
+            left: 30px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            z-index: 100;
+            opacity: 0;
+            animation: fadeIn 1s ease-in forwards;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+            letter-spacing: 0.05em;
+        }
+
+        .hero-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transform: scale(1.1);
+            animation: zoomFadeIn 2s ease-out forwards;
+            z-index: 1;
+        }
+
+        .hero-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 5.5rem;
+            font-weight: 600;
+            line-height: 1.1;
+            text-align: center;
+            color: #fff;
+            opacity: 0;
+            text-shadow: 0 0 20px rgba(0, 0, 0, 0.6),
+                         2px 2px 4px rgba(0, 0, 0, 0.5);
+            z-index: 2;
+            white-space: nowrap;
+            letter-spacing: -0.02em;
+            height: 6rem;
+        }
+
+        .hero-text.sorting {
+            animation: heroFadeIn 1.5s ease-out forwards;
+        }
+
+        @keyframes heroFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .hero-text .char {
+            display: inline;
+        }
+
+        .plasma-glow {
+            position: absolute;
+            bottom: 0%;
+            right: 12%;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(147, 51, 234, 0.8) 0%, rgba(147, 51, 234, 0.5) 30%, transparent 70%);
+            border-radius: 50%;
+            mix-blend-mode: screen;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0;
+            animation: fadeIn 1.5s ease-in 2s forwards, pulse 1.2s ease-in-out 3.5s infinite;
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            animation: fadeIn 1s ease-in 1s forwards, bounce 1s ease-in-out 2s infinite;
+            cursor: pointer;
+            z-index: 3;
+            transition: opacity 0.3s ease;
+        }
+
+        .scroll-indicator.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .chevron {
+            width: 30px;
+            height: 30px;
+            border-left: 3px solid #fff;
+            border-bottom: 3px solid #fff;
+            transform: rotate(-45deg);
+            filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5));
+        }
+
+        .content {
+            min-height: 100vh;
+            background: #1a1a2e;
+            padding: 100px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .content-inner {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .content h2 {
+            font-size: 3.5rem;
+            margin-bottom: 40px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 1.5s ease, transform 1.5s ease;
+        }
+
+        .content h2.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .content h2 .through-line {
+            font-size: 2rem;
+            font-weight: 300;
+            opacity: 0.7;
+            display: inline;
+            font-style: italic;
+        }
+
+        .content p {
+            font-size: 1.56rem;
+            line-height: 1.7;
+            font-weight: 400;
+            color: #e0e0e0;
+            text-align: left;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 1.5s ease, transform 1.5s ease;
+        }
+
+        .content p.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes zoomFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(1.1);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateX(-50%) translateY(0);
+            }
+            50% {
+                transform: translateX(-50%) translateY(-15px);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+            50% {
+                transform: scale(1.15);
+                opacity: 1;
+            }
+        }
+
+        .chromatic-life {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .chromatic-life.fade-to-white {
+            transition: color 0.8s ease-out, text-shadow 0.8s ease-out;
+        }
+
+        .image-text-section {
+            min-height: 100vh;
+            background: #2a2a4e;
+            padding: 100px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-text-container {
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .image-text-container img {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .image-text-container .text-content h3 {
+            font-size: 2rem;
+            font-weight: 500;
+            line-height: 1.5;
+            color: #fff;
+            letter-spacing: -0.01em;
+        }
+
+        .numbers-section {
+            min-height: 100vh;
+            background: #0f0f1e;
+            padding: 100px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .numbers-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .numbers-container h2 {
+            font-size: 3rem;
+            margin-bottom: 60px;
+            font-weight: 600;
+            text-align: center;
+            letter-spacing: -0.02em;
+        }
+
+        .stat-item {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            align-items: end;
+            margin-bottom: 50px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .stat-item.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .stat-number {
+            font-size: 4.5rem;
+            font-weight: 600;
+            color: #fff;
+            text-align: right;
+            letter-spacing: -0.03em;
+        }
+
+        .stat-description {
+            font-size: 1.5rem;
+            font-weight: 400;
+            color: #d0d0d0;
+            line-height: 1.5;
+            text-align: left;
+        }
+
+        @media (max-width: 768px) {
+            .hero-text {
+                font-size: 2rem;
+                right: 5%;
+                max-width: 300px;
+            }
+
+            .content h2 {
+                font-size: 2rem;
+            }
+
+            .content p {
+                font-size: 1.1rem;
+            }
+
+            .image-text-container {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+
+            .stat-item {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                text-align: center;
+            }
+
+            .stat-number {
+                text-align: center;
+                font-size: 3.5rem;
+            }
+
+            .stat-description {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">HEARTS</div>
+    <section class="hero">
+        <img src="Moxi_Document/EYU_2025/EYU_2025_Alexander_HEARTS_1_Cleaned.jpeg" alt="HEARTS Project" class="hero-image">
+        <div class="plasma-glow"></div>
+        <div class="hero-text" id="heroText">
+            We bring data to life.
+        </div>
+        <div class="scroll-indicator" id="scrollIndicator">
+            <div class="chevron"></div>
+        </div>
+    </section>
+
+    <section class="content">
+        <div class="content-inner">
+            <h2><strong>H</strong>uman <strong>E</strong>nvironmental <strong>A</strong>ttunement <span class="through-line">through</span> <strong>R</strong>eal <strong>T</strong>ime <strong>S</strong>ensing</h2>
+            <p>
+                HEARTS transforms invisible environmental forces into tangible experiences. Through real-time sonification and visualization of scientific data, we reveal imperceptible phenomena—solar storms, volcanic tremors—fostering deeper connection and understanding of the natural systems that shape our world.
+            </p>
+        </div>
+    </section>
+
+    <section class="image-text-section">
+        <div class="image-text-container">
+            <div class="text-content">
+                <h3>HEARTS debuted the "Volcano Ride" Experience at UCLA's Exploring Your Universe 2025 symposium. Attendees experienced the seismic vibrations of five active volcanoes in real time.</h3>
+            </div>
+            <img src="Moxi_Document/EYU_2025/EYU_2025_Alexander_HEARTS_2.jpeg" alt="Volcano Ride Experience">
+        </div>
+    </section>
+
+    <section class="numbers-section">
+        <div class="numbers-container">
+            <h2>By the numbers</h2>
+            <div class="stat-item" data-delay="0">
+                <div class="stat-number" data-target="2">0</div>
+                <div class="stat-description">data streaming portals (volcanic and space data)</div>
+            </div>
+            <div class="stat-item" data-delay="200">
+                <div class="stat-number" data-target="1000">0</div>
+                <div class="stat-description">attendees to the EYU 2025 exhibition</div>
+            </div>
+            <div class="stat-item" data-delay="400">
+                <div class="stat-number" data-target="2305204">0</div>
+                <div class="stat-description">volcanic data points streamed in real time (estimate)</div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Sorting animation - runs after a microtask to not block initial render
+        (function() {
+            const heroText = document.getElementById('heroText');
+            const originalText = 'We bring data to life.';
+
+            // Pre-compute everything synchronously first
+            const chars = originalText.split('').map((char, idx) => ({
+                char, targetIndex: idx, isLife: idx >= 17 && idx <= 20
+            }));
+
+            // Shuffle
+            for (let i = chars.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [chars[i], chars[j]] = [chars[j], chars[i]];
+            }
+
+            // Pre-compute all swaps
+            const swaps = [];
+            const arr = chars.map(c => c.targetIndex);
+            for (let i = 0; i < arr.length - 1; i++) {
+                for (let j = 0; j < arr.length - i - 1; j++) {
+                    if (arr[j] > arr[j + 1]) {
+                        swaps.push([j, j + 1]);
+                        [arr[j], arr[j + 1]] = [arr[j + 1], arr[j]];
+                    }
+                }
+            }
+
+            // Colors for "life" letters
+            const lifeColors = [
+                { color: '#60a5fa', shadow: 'rgba(96, 165, 250, 0.8)' },
+                { color: '#e879f9', shadow: 'rgba(232, 121, 249, 0.8)' },
+                { color: '#7dd3fc', shadow: 'rgba(125, 211, 252, 0.8)' }
+            ];
+
+            function randomColor() {
+                return lifeColors[Math.floor(Math.random() * lifeColors.length)];
+            }
+
+            function applyColor(span) {
+                const c = randomColor();
+                span.style.color = c.color;
+                span.style.textShadow = `0 0 20px ${c.shadow}, 0 0 40px ${c.shadow}, 2px 2px 4px rgba(0,0,0,0.5)`;
+            }
+
+            // Build initial HTML
+            heroText.innerHTML = chars.map(item => {
+                const displayChar = item.char === ' ' ? '&nbsp;' : item.char;
+                const className = item.isLife ? 'char chromatic-life' : 'char';
+                return `<span class="${className}">${displayChar}</span>`;
+            }).join('');
+            heroText.style.opacity = '1';
+
+            const spans = Array.from(heroText.querySelectorAll('.char'));
+
+            // Track sorting state
+            let sortingComplete = false;
+
+            // Apply initial colors and start random switching for all spans
+            spans.forEach(span => {
+                if (span.classList.contains('chromatic-life')) {
+                    applyColor(span);
+                }
+                // Each span independently checks if it's a life letter and switches color
+                (function switchColor() {
+                    if (!sortingComplete && span.classList.contains('chromatic-life')) {
+                        applyColor(span);
+                        setTimeout(switchColor, 100 + Math.random() * 200);
+                    } else if (!sortingComplete) {
+                        setTimeout(switchColor, 100 + Math.random() * 200);
+                    }
+                })();
+            });
+
+            // Fade to white after sorting
+            function fadeToWhite() {
+                sortingComplete = true;
+                spans.forEach(span => {
+                    if (span.classList.contains('chromatic-life')) {
+                        span.classList.add('fade-to-white');
+                        span.style.color = '#ffffff';
+                        span.style.textShadow = '0 0 20px rgba(0,0,0,0.6), 2px 2px 4px rgba(0,0,0,0.5)';
+                    }
+                });
+                // Start wave effect after fade completes
+                setTimeout(startWaveEffect, 3000);
+            }
+
+            // Wave effect across all letters - gradient wash
+            function startWaveEffect() {
+                const waveColors = [
+                    { start: 'rgba(96, 165, 250, 0.8)', end: 'rgba(232, 121, 249, 0.8)' },
+                    { start: 'rgba(232, 121, 249, 0.8)', end: 'rgba(125, 211, 252, 0.8)' },
+                    { start: 'rgba(125, 211, 252, 0.8)', end: 'rgba(96, 165, 250, 0.8)' }
+                ];
+                let colorIndex = 0;
+                let waveInterval = null;
+                let isVisible = true;
+
+                function lerpColor(start, end, t) {
+                    // Parse rgba values
+                    const parseRgba = (str) => {
+                        const match = str.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*([\d.]+)?\)/);
+                        return { r: +match[1], g: +match[2], b: +match[3], a: match[4] ? +match[4] : 1 };
+                    };
+                    const s = parseRgba(start), e = parseRgba(end);
+                    const r = Math.round(s.r + (e.r - s.r) * t);
+                    const g = Math.round(s.g + (e.g - s.g) * t);
+                    const b = Math.round(s.b + (e.b - s.b) * t);
+                    const a = s.a + (e.a - s.a) * t;
+                    return `rgba(${r}, ${g}, ${b}, ${a})`;
+                }
+
+                function doWave() {
+                    if (!isVisible) return;
+
+                    const palette = waveColors[colorIndex];
+                    colorIndex = (colorIndex + 1) % waveColors.length;
+                    const total = spans.length;
+
+                    // Light up all letters almost simultaneously with gradient colors
+                    spans.forEach((span, i) => {
+                        const t = i / (total - 1); // 0 to 1 across text
+                        const color = lerpColor(palette.start, palette.end, t);
+
+                        setTimeout(() => {
+                            span.style.transition = 'color 0.5s ease-out, text-shadow 0.5s ease-out';
+                            span.style.color = color;
+                            span.style.textShadow = `0 0 15px ${color}, 2px 2px 4px rgba(0,0,0,0.5)`;
+                        }, i * 40); // Slower stagger
+                    });
+
+                    // Fade all back to white together after a moment
+                    setTimeout(() => {
+                        spans.forEach((span, i) => {
+                            setTimeout(() => {
+                                span.style.transition = 'color 1s ease-out, text-shadow 1s ease-out';
+                                span.style.color = '#ffffff';
+                                span.style.textShadow = '0 0 20px rgba(0,0,0,0.6), 2px 2px 4px rgba(0,0,0,0.5)';
+                            }, i * 40);
+                        });
+                    }, 1000);
+                }
+
+                // Use IntersectionObserver to pause/resume when off-screen
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        isVisible = entry.isIntersecting;
+                        if (isVisible && !waveInterval) {
+                            doWave();
+                            waveInterval = setInterval(doWave, 10000);
+                        } else if (!isVisible && waveInterval) {
+                            clearInterval(waveInterval);
+                            waveInterval = null;
+                        }
+                    });
+                }, { threshold: 0.1 });
+
+                observer.observe(heroText);
+
+                // Do first wave, then repeat every 10 seconds
+                doWave();
+                waveInterval = setInterval(doWave, 10000);
+            }
+
+            // Start animation after browser has painted
+            setTimeout(() => {
+                let idx = 0;
+                const interval = setInterval(() => {
+                    // Do 4 swaps per tick
+                    for (let n = 0; n < 4 && idx < swaps.length; n++, idx++) {
+                        const [i, j] = swaps[idx];
+                        [chars[i], chars[j]] = [chars[j], chars[i]];
+
+                        spans[i].textContent = chars[i].char === ' ' ? '\u00A0' : chars[i].char;
+                        spans[j].textContent = chars[j].char === ' ' ? '\u00A0' : chars[j].char;
+                        if (chars[i].isLife) {
+                            spans[i].className = 'char chromatic-life';
+                            applyColor(spans[i]);
+                        } else {
+                            spans[i].className = 'char';
+                            spans[i].style.color = '';
+                            spans[i].style.textShadow = '';
+                        }
+                        if (chars[j].isLife) {
+                            spans[j].className = 'char chromatic-life';
+                            applyColor(spans[j]);
+                        } else {
+                            spans[j].className = 'char';
+                            spans[j].style.color = '';
+                            spans[j].style.textShadow = '';
+                        }
+                    }
+                    if (idx >= swaps.length) {
+                        clearInterval(interval);
+                        fadeToWhite();
+                    }
+                }, 16);
+            }, 50); // 50ms delay lets browser paint first
+        })();
+
+        const scrollIndicator = document.getElementById('scrollIndicator');
+
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 100) {
+                scrollIndicator.classList.add('hidden');
+            } else {
+                scrollIndicator.classList.remove('hidden');
+            }
+        });
+
+        scrollIndicator.addEventListener('click', () => {
+            window.scrollTo({
+                top: window.innerHeight,
+                behavior: 'smooth'
+            });
+        });
+
+        // Counter animation with easing
+        function easeOutExpo(t) {
+            return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+        }
+
+        function animateCounter(element, target, duration = 1200) {
+            const start = 0;
+            const startTime = performance.now();
+
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easedProgress = easeOutExpo(progress);
+                const current = Math.floor(start + (target - start) * easedProgress);
+
+                element.textContent = current.toLocaleString();
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                } else {
+                    element.textContent = target.toLocaleString();
+                }
+            }
+
+            requestAnimationFrame(update);
+        }
+
+        // Intersection Observer for stats
+        const statsObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const item = entry.target;
+                    const delay = parseInt(item.dataset.delay) || 0;
+
+                    setTimeout(() => {
+                        item.classList.add('visible');
+                        const numberElement = item.querySelector('.stat-number');
+                        const target = parseInt(numberElement.dataset.target);
+                        animateCounter(numberElement, target);
+                    }, delay);
+
+                    statsObserver.unobserve(item);
+                }
+            });
+        }, { threshold: 0.2 });
+
+        document.querySelectorAll('.stat-item').forEach(item => {
+            statsObserver.observe(item);
+        });
+
+        // Intersection Observer for content fade-in (title then body)
+        const contentObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const h2 = entry.target.querySelector('h2');
+                    const p = entry.target.querySelector('p');
+
+                    if (h2) {
+                        h2.classList.add('visible');
+                    }
+
+                    if (p) {
+                        setTimeout(() => {
+                            p.classList.add('visible');
+                        }, 500); // Delay body text by 0.5s after title starts
+                    }
+
+                    contentObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.2 });
+
+        const contentInner = document.querySelector('.content-inner');
+        if (contentInner) {
+            contentObserver.observe(contentInner);
+        }
+    </script>
+
+    <!-- Three.js library for wave effect -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- Wave effect module -->
+    <script src="waves.js"></script>
+    <script>
+        // Initialize wave effect when page loads
+        window.addEventListener('load', () => {
+            console.log('Page loaded');
+            console.log('THREE available?', typeof THREE !== 'undefined');
+            console.log('WaveEffect available?', typeof WaveEffect !== 'undefined');
+
+            if (typeof THREE === 'undefined') {
+                console.error('THREE.js not loaded!');
+                return;
+            }
+
+            if (typeof WaveEffect === 'undefined') {
+                console.error('WaveEffect not loaded!');
+                return;
+            }
+
+            try {
+                const waves = new WaveEffect({
+                    waveSpeed: 0.35,
+                    waveDamping: 0.99,
+                    waveForce: 0.30,
+                    waveSourceSize: 0.02,
+                    waveGridSize: 1024,
+                    simSteps: 4,
+                    edgeReflect: 0.05,
+                    edgeBoundary: 0.02,
+                    opacity: 0.2,
+                    color: '#9333ea'
+                });
+                waves.init();
+            } catch (error) {
+                console.error('Error initializing waves:', error);
+            }
+        });
+    </script>
+</body>
+</html>
