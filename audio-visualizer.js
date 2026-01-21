@@ -64,7 +64,7 @@ class AudioVisualizer {
     setMuted(muted) {
         this.isMuted = muted;
         if (this.gainNode) {
-            this.gainNode.gain.value = muted ? 0 : 1;
+            this.gainNode.gain.value = muted ? 0 : 0.4;
         }
     }
 
