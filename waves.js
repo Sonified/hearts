@@ -26,6 +26,11 @@ class WaveEffect {
         this.isVisible = true;
         this.isInViewport = true;
         this.animationId = null;
+        this.isScrolling = false;
+        this.scrollTimeout = null;
+        this.frameCount = 0;
+        this.scrollVelocity = 0;
+        this.lastScrollY = 0;
     }
 
     init() {
@@ -78,7 +83,12 @@ class WaveEffect {
             // Reset previous mouse position to avoid jump
             this.prevMouseX = null;
             this.prevMouseY = null;
-            this.animate();
+            // Brief delay before resuming to stagger CPU load
+            setTimeout(() => {
+                if (this.isVisible && this.isInViewport && !this.animationId) {
+                    this.animate();
+                }
+            }, 100);
         }
     }
 
@@ -216,9 +226,15 @@ class WaveEffect {
     setupEventListeners() {
         const updateMousePosition = () => {
             if (!this.canvas) return;
-            // Don't calculate position until we've received actual mouse input
-            if (this.lastClientX === null || this.lastClientY === null) return;
             const rect = this.canvas.getBoundingClientRect();
+
+            // Use center of canvas as default until we get real mouse input
+            if (this.lastClientX === null || this.lastClientY === null) {
+                this.mouseX = rect.width / 2;
+                this.mouseY = rect.height / 2;
+                return;
+            }
+
             this.mouseX = this.lastClientX - rect.left;
             this.mouseY = this.lastClientY - rect.top;
         };
@@ -232,8 +248,21 @@ class WaveEffect {
         });
 
         // Update mouse position on scroll (canvas moves, mouse stays)
+        // Also track scroll velocity for wave generation
         document.addEventListener('scroll', () => {
             updateMousePosition();
+
+            // Calculate scroll velocity for wave generation
+            const currentScrollY = window.scrollY;
+            this.scrollVelocity = Math.abs(currentScrollY - this.lastScrollY);
+            this.lastScrollY = currentScrollY;
+            this.isScrolling = true;
+
+            clearTimeout(this.scrollTimeout);
+            this.scrollTimeout = setTimeout(() => {
+                this.isScrolling = false;
+                this.scrollVelocity = 0;
+            }, 150);
         }, { passive: true });
 
         document.addEventListener('mouseenter', (e) => {
@@ -286,6 +315,13 @@ class WaveEffect {
             const normalizedVelocity = velocity / canvasWidth;
             forceStrength = normalizedVelocity * this.config.waveForce * 50;
         }
+
+        // Add scroll velocity as wave force when no mouse movement
+        if (forceStrength === 0 && this.scrollVelocity > 0) {
+            const normalizedScrollVelocity = this.scrollVelocity / canvasHeight;
+            forceStrength = normalizedScrollVelocity * this.config.waveForce * 30;
+        }
+
         this.prevMouseX = this.mouseX;
         this.prevMouseY = this.mouseY;
 

@@ -26,6 +26,8 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            z-index: 1; /* Stay above fixed starfield */
+            background: #000; /* Opaque background to block starfield */
         }
 
         .hero::after {
@@ -69,6 +71,8 @@
             transform: scale(1.1);
             animation: zoomFadeIn 2s ease-out forwards;
             z-index: 1;
+            will-change: transform, opacity;
+            backface-visibility: hidden;
         }
 
         .hero-text {
@@ -88,6 +92,8 @@
             white-space: nowrap;
             letter-spacing: -0.02em;
             height: 6rem;
+            will-change: opacity, contents;
+            backface-visibility: hidden;
         }
 
         .hero-text.sorting {
@@ -103,6 +109,7 @@
             display: inline;
         }
 
+        /* DISABLED: Plasma glow effect
         .plasma-glow {
             position: absolute;
             bottom: 0%;
@@ -117,6 +124,7 @@
             opacity: 0;
             animation: fadeIn 1.5s ease-in 2s forwards, pulse 1.2s ease-in-out 3.5s infinite;
         }
+        */
 
         .scroll-indicator {
             position: absolute;
@@ -151,6 +159,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
+            z-index: 1; /* Stay above fixed starfield */
         }
 
         .content-inner {
@@ -180,6 +190,10 @@
             opacity: 0.7;
             display: inline;
             font-style: italic;
+        }
+
+        .content h2 .hearts-letter {
+            color: #60a5fa;
         }
 
         .content p {
@@ -227,6 +241,7 @@
             }
         }
 
+        /* DISABLED: Pulse animation for plasma glow
         @keyframes pulse {
             0%, 100% {
                 transform: scale(1);
@@ -237,6 +252,7 @@
                 opacity: 1;
             }
         }
+        */
 
         .chromatic-life {
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
@@ -346,6 +362,28 @@
             height: 100vh;
             overflow: hidden;
             display: flex;
+        }
+
+        .starfield-bg {
+            position: fixed;
+            top: -35vh;
+            left: 0;
+            width: 100%;
+            height: 180vh; /* Extra height for parallax movement */
+            background-image: url('Starfield.jpg');
+            background-size: cover;
+            background-position: center;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            will-change: transform;
+            backface-visibility: hidden;
+            transform: translateZ(0); /* Force GPU layer */
+        }
+
+        .starfield-bg.visible {
+            opacity: 1;
         }
 
         .satellite-panel {
@@ -506,8 +544,10 @@
 <body>
     <div class="logo">HEARTS</div>
     <section class="hero">
-        <img src="Moxi_Document/EYU_2025/EYU_2025_Alexander_HEARTS_1_Cleaned.jpeg" alt="HEARTS Project" class="hero-image">
+        <img src="Moxi_Document/EYU_2025/EYU_2025_Alexander_HEARTS_1_Cleaned.jpeg" alt="HEARTS Project" class="hero-image" fetchpriority="high">
+        <!-- DISABLED: Plasma glow effect
         <div class="plasma-glow"></div>
+        -->
         <div class="hero-text" id="heroText">
             We bring data to life.
         </div>
@@ -518,14 +558,15 @@
 
     <section class="content">
         <div class="content-inner">
-            <h2><strong>H</strong>uman <strong>E</strong>nvironmental <strong>A</strong>ttunement <span class="through-line">through</span> <strong>R</strong>eal <strong>T</strong>ime <strong>S</strong>ensing</h2>
+            <h2><strong class="hearts-letter">H</strong>uman <strong class="hearts-letter">E</strong>nvironmental <strong class="hearts-letter">A</strong>ttunement <span class="through-line">through</span> <strong class="hearts-letter">R</strong>eal <strong class="hearts-letter">T</strong>ime <strong class="hearts-letter">S</strong>ensing</h2>
             <p>
-                HEARTS transforms invisible environmental forces into tangible experiences. Through real-time sonification and visualization of scientific data, we reveal imperceptible phenomena—solar storms, volcanic tremors—fostering deeper connection and understanding of the natural systems that shape our world.
+                HEARTS transforms invisible forces into tangible experiences. Through real-time sonification and visualization of scientific data, we reveal imperceptible environmental phenomena—solar storms, volcanic tremors—fostering deeper connection and understanding of the natural systems that shape our world.
             </p>
         </div>
     </section>
 
     <div class="satellite-scroll-container" id="satelliteScrollContainer">
+        <div class="starfield-bg" id="starfieldBg"></div>
         <div class="satellite-sticky">
             <div class="satellite-panel" id="satellitePanel">
                 <canvas id="satellite-canvas"></canvas>
@@ -781,20 +822,99 @@
 
         const scrollIndicator = document.getElementById('scrollIndicator');
 
-        window.addEventListener('scroll', () => {
-            if (window.scrollY > 100) {
-                scrollIndicator.classList.add('hidden');
-            } else {
-                scrollIndicator.classList.remove('hidden');
-            }
-        });
-
         scrollIndicator.addEventListener('click', () => {
             window.scrollTo({
                 top: window.innerHeight,
                 behavior: 'smooth'
             });
         });
+
+        // ============================================
+        // UNIFIED SCROLL HANDLER - Single RAF-throttled handler for all scroll updates
+        // ============================================
+        (function initUnifiedScrollHandler() {
+            let scrollRAF = null;
+            let lastScrollY = 0;
+
+            // Cache DOM elements
+            const satelliteScrollContainer = document.getElementById('satelliteScrollContainer');
+            const satellitePanel = document.getElementById('satellitePanel');
+            const plotPanel = document.getElementById('plotPanel');
+            const satelliteLabel = document.getElementById('satelliteLabel');
+            const starfieldBg = document.getElementById('starfieldBg');
+
+            // Shared state for satellite tilt (updated by scroll, read by animation loop)
+            window.satelliteScrollTilt = 0;
+
+            function handleScroll() {
+                const scrollY = window.scrollY;
+                const viewportHeight = window.innerHeight;
+
+                // 1. Scroll indicator visibility
+                if (scrollY > 100) {
+                    scrollIndicator.classList.add('hidden');
+                } else {
+                    scrollIndicator.classList.remove('hidden');
+                }
+
+                // 2. Satellite section animations (only if elements exist)
+                if (satelliteScrollContainer && satellitePanel && plotPanel) {
+                    const rect = satelliteScrollContainer.getBoundingClientRect();
+                    const containerTop = rect.top;
+                    const containerHeight = rect.height;
+
+                    // Scroll progress for satellite/plot animation
+                    const scrollDistance = containerHeight - viewportHeight;
+                    const scrolled = -containerTop;
+                    const progress = Math.max(0, Math.min(1, scrolled / scrollDistance));
+
+                    // Satellite panel transform
+                    const satelliteX = -progress * 25;
+                    const satelliteScale = 1 - (progress * 0.2);
+                    satellitePanel.style.transform = `translateX(${satelliteX}%) scale(${satelliteScale})`;
+
+                    // Satellite label visibility
+                    if (satelliteLabel) {
+                        if (progress > 0.1) {
+                            satelliteLabel.classList.add('hidden');
+                        } else {
+                            satelliteLabel.classList.remove('hidden');
+                        }
+                    }
+
+                    // Plot panel transform
+                    const plotX = 100 - (progress * 100);
+                    plotPanel.style.transform = `translateX(${plotX}%)`;
+                    plotPanel.style.opacity = progress;
+
+                    // Satellite tilt (shared with animation loop)
+                    const sectionCenter = containerTop + containerHeight / 2;
+                    const viewportCenter = viewportHeight / 2;
+                    const tiltOffset = (sectionCenter - viewportCenter) / viewportHeight;
+                    window.satelliteScrollTilt = tiltOffset * 1.2;
+
+                    // Starfield parallax
+                    if (starfieldBg && starfieldBg.classList.contains('visible')) {
+                        const maxOffset = viewportHeight * 0.25;
+                        const parallaxOffset = -containerTop * 0.12;
+                        const clampedOffset = Math.max(-maxOffset, Math.min(maxOffset, parallaxOffset));
+                        starfieldBg.style.transform = `translateY(${clampedOffset}px)`;
+                    }
+                }
+
+                lastScrollY = scrollY;
+                scrollRAF = null;
+            }
+
+            window.addEventListener('scroll', () => {
+                if (!scrollRAF) {
+                    scrollRAF = requestAnimationFrame(handleScroll);
+                }
+            }, { passive: true });
+
+            // Initial call
+            handleScroll();
+        })();
 
         // Counter animation with easing
         function easeOutExpo(t) {
@@ -904,8 +1024,8 @@
                     waveDamping: 0.99,
                     waveForce: 0.30,
                     waveSourceSize: 0.02,
-                    waveGridSize: 1024,
-                    simSteps: 4,
+                    waveGridSize: 512,
+                    simSteps: 2,
                     edgeReflect: 0.05,
                     edgeBoundary: 0.02,
                     opacity: 0.2,
@@ -944,7 +1064,7 @@
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Cap at 1.5 for perf
-            renderer.setClearColor(0x000000, 1);
+            renderer.setClearColor(0x000000, 0); // Transparent background to show starfield
 
             // Lighting
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -991,29 +1111,7 @@
             let isVisible = false;
             let animationId = null;
             let time = 0;
-            let scrollTilt = 0;
-
-            // Track scroll for parallax tilt (throttled with RAF)
-            let scrollTiltPending = false;
-            function updateScrollTilt() {
-                const rect = section.getBoundingClientRect();
-                const viewportHeight = window.innerHeight;
-                const sectionCenter = rect.top + rect.height / 2;
-                const viewportCenter = viewportHeight / 2;
-                const offset = (sectionCenter - viewportCenter) / viewportHeight;
-                scrollTilt = offset * 1.2;
-                scrollTiltPending = false;
-            }
-
-            function requestScrollTiltUpdate() {
-                if (!scrollTiltPending) {
-                    scrollTiltPending = true;
-                    requestAnimationFrame(updateScrollTilt);
-                }
-            }
-
-            window.addEventListener('scroll', requestScrollTiltUpdate, { passive: true });
-            updateScrollTilt();
+            // scrollTilt is now managed by unified scroll handler (window.satelliteScrollTilt)
 
             // Visibility handling
             const observer = new IntersectionObserver((entries) => {
@@ -1046,8 +1144,8 @@
                 time += 0.01;
 
                 if (satellite) {
-                    // Continuous rotation + scroll parallax tilt
-                    satellite.rotation.x = -time * 0.1 + scrollTilt;  // Base spin + scroll tilt
+                    // Continuous rotation + scroll parallax tilt (from unified scroll handler)
+                    satellite.rotation.x = -time * 0.1 + (window.satelliteScrollTilt || 0);
                     satellite.rotation.y = time * 0.05; // Very slow side rotation
                     // Subtle floating motion
                     satellite.position.y = Math.sin(time * 0.5) * 0.1;
@@ -1061,55 +1159,19 @@
         }
 
         function initScrollDrivenAnimation() {
+            // All scroll handling is done by the unified scroll handler
+            // This function only sets up the IntersectionObserver for starfield visibility
             const scrollContainer = document.getElementById('satelliteScrollContainer');
-            const satellitePanel = document.getElementById('satellitePanel');
-            const plotPanel = document.getElementById('plotPanel');
-            const satelliteLabel = document.getElementById('satelliteLabel');
+            const starfieldBg = document.getElementById('starfieldBg');
 
-            if (!scrollContainer || !satellitePanel || !plotPanel) return;
-
-            let scrollAnimPending = false;
-            function updateScrollAnimation() {
-                const rect = scrollContainer.getBoundingClientRect();
-                const containerTop = rect.top;
-                const containerHeight = rect.height;
-                const viewportHeight = window.innerHeight;
-
-                const scrollDistance = containerHeight - viewportHeight;
-                const scrolled = -containerTop;
-                const progress = Math.max(0, Math.min(1, scrolled / scrollDistance));
-
-                // Animate satellite panel
-                const satelliteX = -progress * 25;
-                const satelliteScale = 1 - (progress * 0.2);
-                satellitePanel.style.transform = `translateX(${satelliteX}%) scale(${satelliteScale})`;
-
-                // Fade out the satellite label
-                if (progress > 0.1) {
-                    satelliteLabel.classList.add('hidden');
-                } else {
-                    satelliteLabel.classList.remove('hidden');
-                }
-
-                // Animate plot panel
-                const plotX = 100 - (progress * 100);
-                const plotOpacity = progress;
-                plotPanel.style.transform = `translateX(${plotX}%)`;
-                plotPanel.style.opacity = plotOpacity;
-
-                scrollAnimPending = false;
+            if (starfieldBg && scrollContainer) {
+                const starfieldObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        starfieldBg.classList.toggle('visible', entry.isIntersecting);
+                    });
+                }, { threshold: 0 });
+                starfieldObserver.observe(scrollContainer);
             }
-
-            function requestScrollAnimUpdate() {
-                if (!scrollAnimPending) {
-                    scrollAnimPending = true;
-                    requestAnimationFrame(updateScrollAnimation);
-                }
-            }
-
-            // Listen to scroll (throttled with RAF)
-            window.addEventListener('scroll', requestScrollAnimUpdate, { passive: true });
-            updateScrollAnimation();
         }
 
         function initDummyPlot() {
