@@ -67,8 +67,13 @@ class AudioVisualizer {
         if (this.audioContext && this.audioContext.state === 'suspended') {
             this.audioContext.resume();
         }
-        if (this.gainNode) {
-            this.gainNode.gain.value = muted ? 0 : 0.4;
+        if (this.gainNode && this.audioContext) {
+            const targetValue = muted ? 0 : 0.25;
+            const now = this.audioContext.currentTime;
+            // Smooth fade over 0.3 seconds
+            this.gainNode.gain.cancelScheduledValues(now);
+            this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+            this.gainNode.gain.linearRampToValueAtTime(targetValue, now + 0.3);
         }
     }
 
