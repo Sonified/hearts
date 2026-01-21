@@ -73,7 +73,7 @@ class AudioVisualizer {
             // Smooth fade over 0.3 seconds
             this.gainNode.gain.cancelScheduledValues(now);
             this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
-            this.gainNode.gain.linearRampToValueAtTime(targetValue, now + 0.3);
+            this.gainNode.gain.linearRampToValueAtTime(targetValue, now + 0.15);
         }
     }
 

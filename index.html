@@ -1384,8 +1384,7 @@
                         // Initialize visualizer when visible
                         initAudioVisualizer();
                     } else {
-                        clearSequence();
-                        // Mute when leaving
+                        // Just mute audio when leaving, keep UI visible
                         isMuted = true;
                         audioControl.classList.remove('unmuted');
                         if (audioVisualizer) {
