@@ -44,6 +44,8 @@
                         rgba(0, 0, 0, 0.4) 100%);
             pointer-events: none;
             z-index: 1;
+            animation: none !important;
+            opacity: 1 !important;
         }
 
         .logo {
@@ -56,8 +58,13 @@
             z-index: 100;
             opacity: 0;
             animation: fadeIn 1s ease-in forwards;
+            animation-play-state: paused;
             text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
             letter-spacing: 0.05em;
+        }
+
+        .logo.loaded {
+            animation-play-state: running;
         }
 
         .hero-image {
@@ -827,11 +834,11 @@
             }, 50); // 50ms delay lets browser paint first
         })();
 
-        // Enable hero image animation (paused initially to prevent re-triggering on focus change)
+        // Enable animations (paused initially to prevent re-triggering on focus change)
         const heroImage = document.querySelector('.hero-image');
-        if (heroImage) {
-            heroImage.classList.add('loaded');
-        }
+        const logo = document.querySelector('.logo');
+        if (heroImage) heroImage.classList.add('loaded');
+        if (logo) logo.classList.add('loaded');
 
         const scrollIndicator = document.getElementById('scrollIndicator');
 
@@ -853,8 +860,8 @@
             // Cache DOM elements
             const satelliteScrollContainer = document.getElementById('satelliteScrollContainer');
             const satellitePanel = document.getElementById('satellitePanel');
-            const plotPanel = document.getElementById('plotPanel');
             const satelliteLabel = document.getElementById('satelliteLabel');
+            const plotPanel = document.getElementById('plotPanel');
             const starfieldBg = document.getElementById('starfieldBg');
 
             // Shared state for satellite tilt (updated by scroll, read by animation loop)
@@ -887,13 +894,10 @@
                     const satelliteScale = 1 - (progress * 0.2);
                     satellitePanel.style.transform = `translateX(${satelliteX}%) scale(${satelliteScale})`;
 
-                    // Satellite label visibility
+                    // Counter-scale satellite label to prevent shrinking
                     if (satelliteLabel) {
-                        if (progress > 0.1) {
-                            satelliteLabel.classList.add('hidden');
-                        } else {
-                            satelliteLabel.classList.remove('hidden');
-                        }
+                        const counterScale = 1 / satelliteScale;
+                        satelliteLabel.style.transform = `translateX(-50%) scale(${counterScale})`;
                     }
 
                     // Plot panel transform
