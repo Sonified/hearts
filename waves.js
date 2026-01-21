@@ -14,14 +14,18 @@ class WaveEffect {
             color: config.color || '#9333ea'
         };
 
-        this.mouseX = window.innerWidth / 2;
-        this.mouseY = window.innerHeight / 2;
-        this.lastClientX = window.innerWidth / 2;
-        this.lastClientY = window.innerHeight / 2;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.lastClientX = null;
+        this.lastClientY = null;
         this.prevMouseX = null;
         this.prevMouseY = null;
         this.mouseIsActive = false;
+        this.hasReceivedMouseInput = false;
         this.initialized = false;
+        this.isVisible = true;
+        this.isInViewport = true;
+        this.animationId = null;
     }
 
     init() {
@@ -29,9 +33,53 @@ class WaveEffect {
         this.createCanvas();
         this.initWaveSimulation();
         this.setupEventListeners();
+        this.setupVisibilityHandling();
         this.animate();
         this.initialized = true;
         // console.log('Wave effect initialized');
+    }
+
+    setupVisibilityHandling() {
+        // Pause when tab is hidden
+        document.addEventListener('visibilitychange', () => {
+            this.isVisible = !document.hidden;
+            if (this.isVisible && this.isInViewport) {
+                this.resumeAnimation();
+            } else {
+                this.pauseAnimation();
+            }
+        });
+
+        // Pause when canvas is off-screen
+        if (this.canvas) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    this.isInViewport = entry.isIntersecting;
+                    if (this.isVisible && this.isInViewport) {
+                        this.resumeAnimation();
+                    } else {
+                        this.pauseAnimation();
+                    }
+                });
+            }, { threshold: 0.01 });
+            observer.observe(this.canvas);
+        }
+    }
+
+    pauseAnimation() {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+    }
+
+    resumeAnimation() {
+        if (!this.animationId && this.initialized) {
+            // Reset previous mouse position to avoid jump
+            this.prevMouseX = null;
+            this.prevMouseY = null;
+            this.animate();
+        }
     }
 
     createCanvas() {
@@ -168,6 +216,8 @@ class WaveEffect {
     setupEventListeners() {
         const updateMousePosition = () => {
             if (!this.canvas) return;
+            // Don't calculate position until we've received actual mouse input
+            if (this.lastClientX === null || this.lastClientY === null) return;
             const rect = this.canvas.getBoundingClientRect();
             this.mouseX = this.lastClientX - rect.left;
             this.mouseY = this.lastClientY - rect.top;
@@ -176,6 +226,7 @@ class WaveEffect {
         document.addEventListener('mousemove', (e) => {
             this.lastClientX = e.clientX;
             this.lastClientY = e.clientY;
+            this.hasReceivedMouseInput = true;
             updateMousePosition();
             this.mouseIsActive = true;
         });
@@ -198,6 +249,7 @@ class WaveEffect {
             const touch = e.touches[0];
             this.lastClientX = touch.clientX;
             this.lastClientY = touch.clientY;
+            this.hasReceivedMouseInput = true;
             updateMousePosition();
             this.mouseIsActive = true;
         }, { passive: true });
@@ -207,6 +259,7 @@ class WaveEffect {
             const touch = e.touches[0];
             this.lastClientX = touch.clientX;
             this.lastClientY = touch.clientY;
+            this.hasReceivedMouseInput = true;
             updateMousePosition();
         }, { passive: true });
 
@@ -286,7 +339,11 @@ class WaveEffect {
     }
 
     animate() {
-        requestAnimationFrame(() => this.animate());
+        if (!this.isVisible || !this.isInViewport) {
+            this.animationId = null;
+            return;
+        }
+        this.animationId = requestAnimationFrame(() => this.animate());
         this.render();
     }
 

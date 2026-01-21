@@ -333,6 +333,139 @@
             text-align: left;
         }
 
+        /* Scroll-driven satellite to plot transition */
+        .satellite-scroll-container {
+            height: 200vh; /* Scroll distance for the animation */
+            position: relative;
+            background: #000000;
+        }
+
+        .satellite-sticky {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .satellite-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transition: none; /* JS controls this */
+            will-change: transform;
+        }
+
+        #satellite-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .satellite-label {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+            opacity: 0;
+            animation: fadeIn 1s ease-in 0.5s forwards;
+            transition: opacity 0.3s ease;
+        }
+
+        .satellite-label.hidden {
+            opacity: 0 !important;
+        }
+
+        .satellite-label h3 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            letter-spacing: -0.02em;
+        }
+
+        .satellite-label p {
+            font-size: 1.1rem;
+            color: #a0a0a0;
+            max-width: 600px;
+        }
+
+        .plot-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            opacity: 0;
+            transform: translateX(100%);
+            will-change: transform, opacity;
+        }
+
+        .plot-container {
+            width: 100%;
+            max-width: 600px;
+            background: rgba(20, 20, 40, 0.9);
+            border-radius: 12px;
+            padding: 30px;
+            border: 1px solid rgba(147, 51, 234, 0.3);
+        }
+
+        .plot-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .plot-canvas {
+            width: 100%;
+            height: 300px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .plot-canvas canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .plot-axis-label {
+            position: absolute;
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .plot-axis-label.y-axis {
+            left: 10px;
+            top: 50%;
+            transform: rotate(-90deg) translateX(-50%);
+            transform-origin: left center;
+        }
+
+        .plot-axis-label.x-axis {
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .plot-description {
+            margin-top: 20px;
+            font-size: 1rem;
+            color: #a0a0a0;
+            line-height: 1.6;
+        }
+
         @media (max-width: 768px) {
             .hero-text {
                 font-size: 2rem;
@@ -391,6 +524,31 @@
             </p>
         </div>
     </section>
+
+    <div class="satellite-scroll-container" id="satelliteScrollContainer">
+        <div class="satellite-sticky">
+            <div class="satellite-panel" id="satellitePanel">
+                <canvas id="satellite-canvas"></canvas>
+                <div class="satellite-label" id="satelliteLabel">
+                    <h3>Advanced Composition Explorer</h3>
+                    <p>NASA's ACE spacecraft streams real-time solar wind data from the L1 Lagrange point, 1.5 million kilometers from Earth.</p>
+                </div>
+            </div>
+            <div class="plot-panel" id="plotPanel">
+                <div class="plot-container">
+                    <div class="plot-title">Real-Time Solar Wind Data</div>
+                    <div class="plot-canvas" id="dummyPlot">
+                        <canvas id="plotCanvas"></canvas>
+                        <div class="plot-axis-label y-axis">Velocity (km/s)</div>
+                        <div class="plot-axis-label x-axis">Time (UTC)</div>
+                    </div>
+                    <p class="plot-description">
+                        Live solar wind velocity measurements streaming from ACE. Sudden increases often precede geomagnetic storms that can affect Earth's magnetosphere.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <section class="image-text-section">
         <div class="image-text-container">
@@ -718,6 +876,8 @@
 
     <!-- Three.js library for wave effect -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- GLTFLoader for 3D models -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <!-- Wave effect module -->
     <script src="waves.js"></script>
@@ -755,7 +915,301 @@
             } catch (error) {
                 console.error('Error initializing waves:', error);
             }
+
+            // Initialize satellite viewer
+            initSatelliteViewer();
+
+            // Initialize scroll-driven animation
+            initScrollDrivenAnimation();
+
+            // Initialize dummy plot
+            initDummyPlot();
         });
+
+        function initSatelliteViewer() {
+            const canvas = document.getElementById('satellite-canvas');
+            const section = document.getElementById('satelliteScrollContainer');
+            if (!canvas || !section) return;
+
+            // Scene setup
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            const renderer = new THREE.WebGLRenderer({
+                canvas,
+                antialias: true,
+                alpha: true,
+                powerPreference: 'high-performance'
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Cap at 1.5 for perf
+            renderer.setClearColor(0x000000, 1);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            const backLight = new THREE.DirectionalLight(0x6366f1, 0.3);
+            backLight.position.set(-5, -5, -5);
+            scene.add(backLight);
+
+            // Load satellite model
+            let satellite = null;
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                'Advanced%20Composition%20Explorer.glb',
+                (gltf) => {
+                    satellite = gltf.scene;
+
+                    // Center and scale the model
+                    const box = new THREE.Box3().setFromObject(satellite);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 2.5 / maxDim;
+
+                    satellite.scale.setScalar(scale);
+                    satellite.position.sub(center.multiplyScalar(scale));
+
+                    scene.add(satellite);
+                    console.log('Satellite model loaded');
+                },
+                (progress) => {
+                    console.log('Loading satellite:', (progress.loaded / progress.total * 100).toFixed(0) + '%');
+                },
+                (error) => {
+                    console.error('Error loading satellite model:', error);
+                }
+            );
+
+            // Animation state
+            let isVisible = false;
+            let animationId = null;
+            let time = 0;
+            let scrollTilt = 0;
+
+            // Track scroll for parallax tilt (throttled with RAF)
+            let scrollTiltPending = false;
+            function updateScrollTilt() {
+                const rect = section.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                const sectionCenter = rect.top + rect.height / 2;
+                const viewportCenter = viewportHeight / 2;
+                const offset = (sectionCenter - viewportCenter) / viewportHeight;
+                scrollTilt = offset * 1.2;
+                scrollTiltPending = false;
+            }
+
+            function requestScrollTiltUpdate() {
+                if (!scrollTiltPending) {
+                    scrollTiltPending = true;
+                    requestAnimationFrame(updateScrollTilt);
+                }
+            }
+
+            window.addEventListener('scroll', requestScrollTiltUpdate, { passive: true });
+            updateScrollTilt();
+
+            // Visibility handling
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    isVisible = entry.isIntersecting;
+                    if (isVisible && !animationId) {
+                        animate();
+                    } else if (!isVisible && animationId) {
+                        cancelAnimationFrame(animationId);
+                        animationId = null;
+                    }
+                });
+            }, { threshold: 0.1 });
+            observer.observe(section);
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Animation loop
+            function animate() {
+                if (!isVisible) {
+                    animationId = null;
+                    return;
+                }
+                animationId = requestAnimationFrame(animate);
+                time += 0.01;
+
+                if (satellite) {
+                    // Continuous rotation + scroll parallax tilt
+                    satellite.rotation.x = -time * 0.1 + scrollTilt;  // Base spin + scroll tilt
+                    satellite.rotation.y = time * 0.05; // Very slow side rotation
+                    // Subtle floating motion
+                    satellite.position.y = Math.sin(time * 0.5) * 0.1;
+                }
+
+                renderer.render(scene, camera);
+            }
+
+            // Start animation if visible
+            if (isVisible) animate();
+        }
+
+        function initScrollDrivenAnimation() {
+            const scrollContainer = document.getElementById('satelliteScrollContainer');
+            const satellitePanel = document.getElementById('satellitePanel');
+            const plotPanel = document.getElementById('plotPanel');
+            const satelliteLabel = document.getElementById('satelliteLabel');
+
+            if (!scrollContainer || !satellitePanel || !plotPanel) return;
+
+            let scrollAnimPending = false;
+            function updateScrollAnimation() {
+                const rect = scrollContainer.getBoundingClientRect();
+                const containerTop = rect.top;
+                const containerHeight = rect.height;
+                const viewportHeight = window.innerHeight;
+
+                const scrollDistance = containerHeight - viewportHeight;
+                const scrolled = -containerTop;
+                const progress = Math.max(0, Math.min(1, scrolled / scrollDistance));
+
+                // Animate satellite panel
+                const satelliteX = -progress * 25;
+                const satelliteScale = 1 - (progress * 0.2);
+                satellitePanel.style.transform = `translateX(${satelliteX}%) scale(${satelliteScale})`;
+
+                // Fade out the satellite label
+                if (progress > 0.1) {
+                    satelliteLabel.classList.add('hidden');
+                } else {
+                    satelliteLabel.classList.remove('hidden');
+                }
+
+                // Animate plot panel
+                const plotX = 100 - (progress * 100);
+                const plotOpacity = progress;
+                plotPanel.style.transform = `translateX(${plotX}%)`;
+                plotPanel.style.opacity = plotOpacity;
+
+                scrollAnimPending = false;
+            }
+
+            function requestScrollAnimUpdate() {
+                if (!scrollAnimPending) {
+                    scrollAnimPending = true;
+                    requestAnimationFrame(updateScrollAnimation);
+                }
+            }
+
+            // Listen to scroll (throttled with RAF)
+            window.addEventListener('scroll', requestScrollAnimUpdate, { passive: true });
+            updateScrollAnimation();
+        }
+
+        function initDummyPlot() {
+            const canvas = document.getElementById('plotCanvas');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            const container = canvas.parentElement;
+
+            function resize() {
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            // Generate dummy data
+            const dataPoints = 100;
+            let data = [];
+            for (let i = 0; i < dataPoints; i++) {
+                data.push(350 + Math.random() * 100 + Math.sin(i * 0.1) * 50);
+            }
+
+            let offset = 0;
+            let animationId = null;
+
+            function draw() {
+                const width = canvas.width;
+                const height = canvas.height;
+
+                // Clear
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                ctx.fillRect(0, 0, width, height);
+
+                // Draw grid
+                ctx.strokeStyle = 'rgba(147, 51, 234, 0.2)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 5; i++) {
+                    const y = (height / 5) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                }
+
+                // Draw data line
+                ctx.strokeStyle = '#9333ea';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                const padding = 20;
+                const plotWidth = width - padding * 2;
+                const plotHeight = height - padding * 2;
+
+                for (let i = 0; i < dataPoints; i++) {
+                    const x = padding + (i / dataPoints) * plotWidth;
+                    const dataIndex = (i + Math.floor(offset)) % dataPoints;
+                    const normalizedValue = (data[dataIndex] - 300) / 200; // Normalize 300-500 to 0-1
+                    const y = height - padding - normalizedValue * plotHeight;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+
+                // Draw glow effect
+                ctx.strokeStyle = 'rgba(147, 51, 234, 0.3)';
+                ctx.lineWidth = 6;
+                ctx.stroke();
+
+                // Update data (simulate real-time)
+                offset += 0.5;
+                if (offset >= dataPoints) offset = 0;
+
+                // Add new random variation
+                const lastIdx = (Math.floor(offset) + dataPoints - 1) % dataPoints;
+                data[lastIdx] = 350 + Math.random() * 100 + Math.sin(offset * 0.1) * 50;
+
+                animationId = requestAnimationFrame(draw);
+            }
+
+            // Only animate when visible
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        if (!animationId) draw();
+                    } else {
+                        if (animationId) {
+                            cancelAnimationFrame(animationId);
+                            animationId = null;
+                        }
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            observer.observe(canvas);
+        }
     </script>
 </body>
 </html>
