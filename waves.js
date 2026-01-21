@@ -33,9 +33,9 @@ class WaveEffect {
         this.lastScrollY = 0;
         // Idle detection
         this.idleFrames = 0;
-        this.maxIdleFrames = 60; // ~1 second before idle mode
+        this.maxIdleFrames = 180; // ~3 seconds before idle mode
         this.waveEnergy = 0;
-        this.energyDecay = 0.95;
+        this.energyDecay = 0.99; // Match closer to simulation damping (0.996)
         // Frame rate limiting
         this.lastFrameTime = 0;
     }
@@ -349,7 +349,7 @@ class WaveEffect {
         }
 
         // Skip simulation entirely if waves have died down
-        if (this.waveEnergy < 0.001 && this.idleFrames > this.maxIdleFrames) {
+        if (this.waveEnergy < 0.0001 && this.idleFrames > this.maxIdleFrames) {
             return;
         }
 

@@ -518,6 +518,235 @@
             line-height: 1.6;
         }
 
+        .video-section {
+            width: 100%;
+            background: #000;
+            position: relative;
+            z-index: 1;
+        }
+
+        .video-section video {
+            width: 100%;
+            display: block;
+        }
+
+        .video-label {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            font-size: 2rem;
+            font-weight: 600;
+            color: #fff;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+            letter-spacing: 0.02em;
+        }
+
+        .video-scroll-indicator {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            cursor: pointer;
+            z-index: 3;
+            text-align: center;
+            transition: opacity 0.5s ease;
+        }
+
+        .video-scroll-indicator.visible {
+            opacity: 1;
+            animation: bounce 1s ease-in-out infinite;
+        }
+
+        .video-scroll-text {
+            display: block;
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #fff;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+            margin-bottom: 5px;
+            letter-spacing: 0.05em;
+        }
+
+        .video-scroll-indicator .chevron {
+            margin: 0 auto;
+        }
+
+        .audio-toggle {
+            position: absolute;
+            bottom: 80px;
+            right: 100px;
+            width: 100px;
+            padding: 12px 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            background: rgba(220, 38, 38, 0.8);
+            border: 2px solid rgba(239, 68, 68, 1);
+            border-radius: 30px;
+            cursor: pointer;
+            z-index: 10;
+            letter-spacing: 0.05em;
+            transition: all 0.3s ease;
+            animation: pulse-glow 2s ease-in-out infinite;
+            text-align: center;
+        }
+
+        .audio-toggle:hover {
+            background: rgba(239, 68, 68, 1);
+            transform: scale(1.05);
+        }
+
+        .audio-toggle.playing {
+            background: rgba(60, 60, 80, 0.8);
+            border-color: rgba(150, 150, 170, 0.6);
+            animation: none;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), 0 0 20px rgba(239, 68, 68, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.8), 0 0 40px rgba(239, 68, 68, 0.5), 0 0 60px rgba(239, 68, 68, 0.3);
+            }
+        }
+
+        /* Cinematic overlay sequence */
+        .video-overlay-sequence {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .overlay-context {
+            position: absolute;
+            top: 25%;
+            left: 50%;
+            transform: translateX(-50%) translateY(30px);
+            font-size: 1.8rem;
+            font-weight: 500;
+            color: #fff;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 95%;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 1.5s ease, transform 1.5s ease;
+            letter-spacing: 0.02em;
+        }
+
+        .overlay-context.entered {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .overlay-context.visible {
+            opacity: 1;
+        }
+
+        .overlay-context.dimmed {
+            opacity: 0.7;
+        }
+
+        /* Audio control */
+        .audio-control {
+            position: absolute;
+            top: 32%;
+            left: 50%;
+            transform: translateX(-50%) translateY(30px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            z-index: 10;
+            padding: 16px 24px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            opacity: 0;
+            transition: opacity 1.5s ease, transform 1.5s ease, background 0.3s ease;
+        }
+
+        .audio-control.entered {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .audio-control.visible {
+            opacity: 1;
+        }
+
+        .audio-control:hover {
+            background: rgba(0, 0, 0, 0.6);
+        }
+
+        .speaker-icon {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            color: rgba(255, 255, 255, 0.5);
+            transition: color 0.3s ease;
+        }
+
+        .speaker-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .speaker-mute-x {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            color: #ef4444;
+            transition: opacity 0.3s ease;
+        }
+
+        .audio-control.unmuted .speaker-icon {
+            color: #fff;
+        }
+
+        .audio-control.unmuted .speaker-mute-x {
+            opacity: 0;
+        }
+
+        .volume-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            height: 30px;
+        }
+
+        .volume-bar {
+            width: 6px;
+            background: rgba(255, 255, 255, 0.4);
+            border-radius: 3px;
+            transition: background 0.1s ease;
+        }
+
+        .volume-bar:nth-child(1) { height: 6px; }
+        .volume-bar:nth-child(2) { height: 11px; }
+        .volume-bar:nth-child(3) { height: 16px; }
+        .volume-bar:nth-child(4) { height: 22px; }
+        .volume-bar:nth-child(5) { height: 28px; }
+
+        /* Muted state - active bars are brighter grey */
+        .volume-bar.active {
+            background: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Unmuted state - active bars are orange */
+        .audio-control.unmuted .volume-bar {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .audio-control.unmuted .volume-bar.active {
+            background: #f97316;
+        }
+
         @media (max-width: 768px) {
             .hero-text {
                 font-size: 2rem;
@@ -552,6 +781,37 @@
             .stat-description {
                 font-size: 1.2rem;
             }
+
+            .overlay-context {
+                font-size: 1.1rem;
+                max-width: 90%;
+                top: 20%;
+                white-space: normal;
+            }
+
+            .audio-control {
+                top: 45%;
+                padding: 12px 18px;
+            }
+
+            .speaker-icon {
+                width: 28px;
+                height: 28px;
+            }
+
+            .volume-bars {
+                height: 24px;
+            }
+
+            .volume-bar {
+                width: 5px;
+            }
+
+            .volume-bar:nth-child(1) { height: 5px; }
+            .volume-bar:nth-child(2) { height: 9px; }
+            .volume-bar:nth-child(3) { height: 13px; }
+            .volume-bar:nth-child(4) { height: 17px; }
+            .volume-bar:nth-child(5) { height: 21px; }
         }
     </style>
 </head>
@@ -605,6 +865,43 @@
         </div>
     </div>
 
+    <section class="video-section" id="videoSection">
+        <video id="kilaueavideo" autoplay loop muted playsinline>
+            <source src="v1_midnight_2x_trimmed_8s-23s_850p_crf30_audio+1.75s.mp4" type="video/mp4">
+        </video>
+        <!-- Cinematic overlay sequence -->
+        <div class="video-overlay-sequence">
+            <div class="overlay-context" id="overlayContext">December 6, 2024: Mt. Kīlauea erupts with 1,000-foot lava fountains.</div>
+        </div>
+        <!-- Audio control -->
+        <div class="audio-control" id="audioControl">
+            <div class="speaker-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                </svg>
+                <div class="speaker-mute-x" id="speakerMuteX">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                        <line x1="2" y1="2" x2="22" y2="22"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="volume-bars">
+                <div class="volume-bar"></div>
+                <div class="volume-bar"></div>
+                <div class="volume-bar"></div>
+                <div class="volume-bar"></div>
+                <div class="volume-bar"></div>
+            </div>
+        </div>
+        <!-- Old Listen button (commented out)
+        <button class="audio-toggle" id="audioToggle">Listen</button>
+        -->
+        <div class="video-scroll-indicator" id="videoScrollIndicator">
+            <span class="video-scroll-text">Live data feed</span>
+            <div class="chevron"></div>
+        </div>
+    </section>
+
     <section class="image-text-section">
         <div class="image-text-container">
             <div class="text-content">
@@ -631,6 +928,9 @@
             </div>
         </div>
     </section>
+
+    <!-- Audio visualizer for video section -->
+    <script src="audio-visualizer.js"></script>
 
     <script>
         // Sorting animation - runs after a microtask to not block initial render
@@ -1014,6 +1314,161 @@
         if (contentInner) {
             contentObserver.observe(contentInner);
         }
+
+        // Cinematic overlay sequence
+        (function initCinematicOverlay() {
+            const video = document.getElementById('kilaueavideo');
+            const videoSection = document.getElementById('videoSection');
+            const overlayContext = document.getElementById('overlayContext');
+            const audioControl = document.getElementById('audioControl');
+            const volumeBars = audioControl ? audioControl.querySelectorAll('.volume-bar') : [];
+
+            if (!video || !videoSection || !overlayContext || !audioControl) return;
+
+            let sequenceTimers = [];
+            let sequenceStarted = false;
+            let audioVisualizer = null;
+
+            function startSequence() {
+                if (sequenceStarted) return;
+                sequenceStarted = true;
+
+                // Show context at 1s
+                sequenceTimers.push(setTimeout(() => {
+                    overlayContext.classList.add('entered', 'visible');
+                }, 1000));
+
+                // Show audio control at 2s (after text appears)
+                sequenceTimers.push(setTimeout(() => {
+                    audioControl.classList.add('entered', 'visible');
+                }, 2000));
+            }
+
+            function clearSequence() {
+                sequenceTimers.forEach(timer => clearTimeout(timer));
+                sequenceTimers = [];
+                overlayContext.classList.remove('visible', 'entered', 'dimmed');
+                audioControl.classList.remove('visible', 'entered');
+                sequenceStarted = false;
+            }
+
+            let isMuted = true;
+
+            // Initialize audio visualizer when section becomes visible
+            function initAudioVisualizer() {
+                if (window.AudioVisualizer && !audioVisualizer) {
+                    audioVisualizer = new AudioVisualizer(video, volumeBars);
+                    audioVisualizer.start();
+                    audioVisualizer.setMuted(isMuted);
+                }
+            }
+
+            // Audio control click handler - toggles output mute, not analysis
+            audioControl.addEventListener('click', () => {
+                isMuted = !isMuted;
+                if (!isMuted) {
+                    audioControl.classList.add('unmuted');
+                } else {
+                    audioControl.classList.remove('unmuted');
+                }
+                if (audioVisualizer) {
+                    audioVisualizer.setMuted(isMuted);
+                }
+            });
+
+            // Start sequence when video section is visible
+            const sequenceObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        startSequence();
+                        // Initialize visualizer when visible
+                        initAudioVisualizer();
+                    } else {
+                        clearSequence();
+                        // Mute when leaving
+                        isMuted = true;
+                        audioControl.classList.remove('unmuted');
+                        if (audioVisualizer) {
+                            audioVisualizer.setMuted(true);
+                            audioVisualizer.stop();
+                        }
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            sequenceObserver.observe(videoSection);
+        })();
+
+        /* Old audio toggle (commented out)
+        (function initAudioToggle() {
+            const video = document.getElementById('kilaueavideo');
+            const toggleBtn = document.getElementById('audioToggle');
+            const videoSection = document.getElementById('videoSection');
+            if (!video || !toggleBtn || !videoSection) return;
+
+            toggleBtn.addEventListener('click', () => {
+                if (video.muted) {
+                    video.muted = false;
+                    toggleBtn.textContent = 'Mute';
+                    toggleBtn.classList.add('playing');
+                } else {
+                    video.muted = true;
+                    toggleBtn.textContent = 'Listen';
+                    toggleBtn.classList.remove('playing');
+                }
+            });
+
+            // Mute when scrolling off the video section
+            const muteObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting && !video.muted) {
+                        video.muted = true;
+                        toggleBtn.textContent = 'Listen';
+                        toggleBtn.classList.remove('playing');
+                    }
+                });
+            }, { threshold: 0 });
+
+            muteObserver.observe(videoSection);
+        })();
+        */
+
+        // Video section scroll indicator - appears after 3 seconds
+        (function initVideoScrollIndicator() {
+            const videoSection = document.getElementById('videoSection');
+            const videoScrollIndicator = document.getElementById('videoScrollIndicator');
+            if (!videoSection || !videoScrollIndicator) return;
+
+            let showTimeout = null;
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        // Start 10 second timer when section becomes visible
+                        showTimeout = setTimeout(() => {
+                            videoScrollIndicator.classList.add('visible');
+                        }, 10000);
+                    } else {
+                        // Clear timer and hide if section leaves view
+                        if (showTimeout) {
+                            clearTimeout(showTimeout);
+                            showTimeout = null;
+                        }
+                        videoScrollIndicator.classList.remove('visible');
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            observer.observe(videoSection);
+
+            // Click to scroll to next section
+            videoScrollIndicator.addEventListener('click', () => {
+                const nextSection = videoSection.nextElementSibling;
+                if (nextSection) {
+                    nextSection.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        })();
     </script>
 
     <!-- Three.js library for wave effect -->
