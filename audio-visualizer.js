@@ -63,6 +63,10 @@ class AudioVisualizer {
 
     setMuted(muted) {
         this.isMuted = muted;
+        // Resume AudioContext on user interaction (required by browser autoplay policy)
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
+        }
         if (this.gainNode) {
             this.gainNode.gain.value = muted ? 0 : 0.4;
         }
