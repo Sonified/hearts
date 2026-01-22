@@ -68,7 +68,7 @@ class AudioVisualizer {
             this.audioContext.resume();
         }
         if (this.gainNode && this.audioContext) {
-            const targetValue = muted ? 0 : 0.15;
+            const targetValue = muted ? 0 : 0.12;
             const now = this.audioContext.currentTime;
             // Smooth fade over 0.3 seconds
             this.gainNode.gain.cancelScheduledValues(now);

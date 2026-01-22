@@ -814,6 +814,106 @@
             .volume-bar:nth-child(4) { height: 17px; }
             .volume-bar:nth-child(5) { height: 21px; }
         }
+
+        /* Earth zoom section */
+        .earth-scroll-container {
+            height: 300vh; /* Scroll distance for zoom animation */
+            position: relative;
+            background: transparent;
+        }
+
+        .earth-sticky {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #earth-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            transition: opacity 0.3s ease;
+        }
+
+        .earth-label {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .earth-label.visible {
+            opacity: 1;
+        }
+
+        /* Earth debug controls */
+        .earth-debug-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 20px;
+            border-radius: 8px;
+            z-index: 20;
+            font-size: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .earth-debug-controls h4 {
+            margin: 0 0 10px 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #888;
+        }
+
+        .earth-debug-controls label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .earth-debug-controls label:last-child {
+            margin-bottom: 0;
+        }
+
+        .earth-debug-controls input[type="checkbox"] {
+            margin-right: 10px;
+            width: 16px;
+            height: 16px;
+        }
+
+        .earth-label h3 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            letter-spacing: -0.02em;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+        }
+
+        .earth-label p {
+            font-size: 1.1rem;
+            color: #a0a0a0;
+            max-width: 600px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+        }
+
+        @media (max-width: 768px) {
+            .earth-label h3 {
+                font-size: 1.5rem;
+            }
+
+            .earth-label p {
+                font-size: 1rem;
+                max-width: 90%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -862,6 +962,24 @@
                         Live solar wind velocity measurements streaming from ACE. Sudden increases often precede geomagnetic storms that can affect Earth's magnetosphere.
                     </p>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Earth zoom section - transitions from space to Kilauea -->
+    <div class="earth-scroll-container" id="earthScrollContainer">
+        <div class="earth-sticky">
+            <canvas id="earth-canvas"></canvas>
+            <div class="earth-label" id="earthLabel">
+                <h3>Earth</h3>
+                <p>Real-time connection between space weather and terrestrial phenomena.</p>
+            </div>
+            <!-- Debug controls -->
+            <div class="earth-debug-controls" id="earthDebugControls">
+                <h4>Layers</h4>
+                <label><input type="checkbox" id="toggleEarth" checked> Earth</label>
+                <label><input type="checkbox" id="toggleClouds" checked> Clouds</label>
+                <label><input type="checkbox" id="toggleAtmosphere" checked> Atmosphere</label>
             </div>
         </div>
     </div>
@@ -934,7 +1052,7 @@
     <script src="audio-visualizer.js"></script>
 
     <script>
-        // Sorting animation - runs after a microtask to not block initial render
+        // Flicker + Scramble animation for hero text
         (function() {
             const heroText = document.getElementById('heroText');
             const originalText = 'We bring data to life.';
@@ -944,13 +1062,13 @@
                 char, targetIndex: idx, isLife: idx >= 17 && idx <= 20
             }));
 
-            // Shuffle
+            // Shuffle for scramble effect
             for (let i = chars.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [chars[i], chars[j]] = [chars[j], chars[i]];
             }
 
-            // Pre-compute all swaps
+            // Pre-compute all swaps for bubble sort
             const swaps = [];
             const arr = chars.map(c => c.targetIndex);
             for (let i = 0; i < arr.length - 1; i++) {
@@ -979,34 +1097,95 @@
                 span.style.textShadow = `0 0 20px ${c.shadow}, 0 0 40px ${c.shadow}, 2px 2px 4px rgba(0,0,0,0.5)`;
             }
 
-            // Build initial HTML
+            // Build initial HTML - all letters start invisible
             heroText.innerHTML = chars.map(item => {
                 const displayChar = item.char === ' ' ? '&nbsp;' : item.char;
                 const className = item.isLife ? 'char chromatic-life' : 'char';
-                return `<span class="${className}">${displayChar}</span>`;
+                return `<span class="${className}" style="opacity: 0">${displayChar}</span>`;
             }).join('');
             heroText.style.opacity = '1';
 
             const spans = Array.from(heroText.querySelectorAll('.char'));
 
-            // Track sorting state
-            let sortingComplete = false;
+            // Flicker animation for a single letter - 4 quick on/off bounces
+            function flickerOn(span, onComplete) {
+                const flickerPattern = [
+                    { opacity: 0.8, duration: 40 },
+                    { opacity: 0.1, duration: 35 },
+                    { opacity: 0.9, duration: 45 },
+                    { opacity: 0.2, duration: 30 },
+                    { opacity: 0.7, duration: 40 },
+                    { opacity: 0.15, duration: 35 },
+                    { opacity: 0.95, duration: 50 },
+                    { opacity: 1, duration: 0 }
+                ];
 
-            // Apply initial colors and start random switching for all spans
-            spans.forEach(span => {
-                if (span.classList.contains('chromatic-life')) {
-                    applyColor(span);
-                }
-                // Each span independently checks if it's a life letter and switches color
-                (function switchColor() {
-                    if (!sortingComplete && span.classList.contains('chromatic-life')) {
-                        applyColor(span);
-                        setTimeout(switchColor, 100 + Math.random() * 200);
-                    } else if (!sortingComplete) {
-                        setTimeout(switchColor, 100 + Math.random() * 200);
+                let step = 0;
+                function doFlicker() {
+                    if (step < flickerPattern.length) {
+                        span.style.opacity = flickerPattern[step].opacity;
+                        if (flickerPattern[step].duration > 0) {
+                            setTimeout(doFlicker, flickerPattern[step].duration);
+                        }
+                        step++;
                     }
-                })();
-            });
+                    if (step >= flickerPattern.length && onComplete) {
+                        onComplete();
+                    }
+                }
+                doFlicker();
+            }
+
+            // Track states
+            let sortingComplete = false;
+            let flickerComplete = false;
+
+            // Start flicker sequence - 3 letters at a time, random order
+            function startFlickerSequence(onAllComplete) {
+                const groupSize = 3;
+                const staggerDelay = 150; // ms between groups starting
+                let completedCount = 0;
+
+                // Create randomized order of indices
+                const indices = spans.map((_, i) => i);
+                for (let i = indices.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [indices[i], indices[j]] = [indices[j], indices[i]];
+                }
+
+                for (let i = 0; i < indices.length; i++) {
+                    const spanIndex = indices[i];
+                    const groupIndex = Math.floor(i / groupSize);
+                    const delay = groupIndex * staggerDelay;
+
+                    setTimeout(() => {
+                        flickerOn(spans[spanIndex], () => {
+                            completedCount++;
+                            if (completedCount === spans.length) {
+                                flickerComplete = true;
+                                if (onAllComplete) onAllComplete();
+                            }
+                        });
+                    }, delay);
+                }
+            }
+
+            // Apply colors to life letters during/after flicker
+            function startColorSwitching() {
+                spans.forEach(span => {
+                    if (span.classList.contains('chromatic-life')) {
+                        applyColor(span);
+                    }
+                    (function switchColor() {
+                        if (!sortingComplete && span.classList.contains('chromatic-life')) {
+                            applyColor(span);
+                            setTimeout(switchColor, 100 + Math.random() * 200);
+                        } else if (!sortingComplete) {
+                            setTimeout(switchColor, 100 + Math.random() * 200);
+                        }
+                    })();
+                });
+            }
 
             // Fade to white after sorting
             function fadeToWhite() {
@@ -1018,11 +1197,10 @@
                         span.style.textShadow = '0 0 20px rgba(0,0,0,0.6), 2px 2px 4px rgba(0,0,0,0.5)';
                     }
                 });
-                // Start wave effect after fade completes
                 setTimeout(startWaveEffect, 3000);
             }
 
-            // Wave effect across all letters - gradient wash
+            // Wave effect across all letters
             function startWaveEffect() {
                 const waveColors = [
                     { start: 'rgba(96, 165, 250, 0.8)', end: 'rgba(232, 121, 249, 0.8)' },
@@ -1034,39 +1212,29 @@
                 let isVisible = true;
 
                 function lerpColor(start, end, t) {
-                    // Parse rgba values
                     const parseRgba = (str) => {
                         const match = str.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*([\d.]+)?\)/);
                         return { r: +match[1], g: +match[2], b: +match[3], a: match[4] ? +match[4] : 1 };
                     };
                     const s = parseRgba(start), e = parseRgba(end);
-                    const r = Math.round(s.r + (e.r - s.r) * t);
-                    const g = Math.round(s.g + (e.g - s.g) * t);
-                    const b = Math.round(s.b + (e.b - s.b) * t);
-                    const a = s.a + (e.a - s.a) * t;
-                    return `rgba(${r}, ${g}, ${b}, ${a})`;
+                    return `rgba(${Math.round(s.r + (e.r - s.r) * t)}, ${Math.round(s.g + (e.g - s.g) * t)}, ${Math.round(s.b + (e.b - s.b) * t)}, ${s.a + (e.a - s.a) * t})`;
                 }
 
                 function doWave() {
                     if (!isVisible) return;
-
                     const palette = waveColors[colorIndex];
                     colorIndex = (colorIndex + 1) % waveColors.length;
-                    const total = spans.length;
 
-                    // Light up all letters almost simultaneously with gradient colors
                     spans.forEach((span, i) => {
-                        const t = i / (total - 1); // 0 to 1 across text
+                        const t = i / (spans.length - 1);
                         const color = lerpColor(palette.start, palette.end, t);
-
                         setTimeout(() => {
                             span.style.transition = 'color 0.5s ease-out, text-shadow 0.5s ease-out';
                             span.style.color = color;
                             span.style.textShadow = `0 0 15px ${color}, 2px 2px 4px rgba(0,0,0,0.5)`;
-                        }, i * 40); // Slower stagger
+                        }, i * 40);
                     });
 
-                    // Fade all back to white together after a moment
                     setTimeout(() => {
                         spans.forEach((span, i) => {
                             setTimeout(() => {
@@ -1078,7 +1246,6 @@
                     }, 1000);
                 }
 
-                // Use IntersectionObserver to pause/resume when off-screen
                 const observer = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
                         isVisible = entry.isIntersecting;
@@ -1093,17 +1260,14 @@
                 }, { threshold: 0.1 });
 
                 observer.observe(heroText);
-
-                // Do first wave, then repeat every 10 seconds
                 doWave();
                 waveInterval = setInterval(doWave, 7000);
             }
 
-            // Start animation after browser has painted
-            setTimeout(() => {
+            // Start scramble sorting animation
+            function startSorting() {
                 let idx = 0;
                 const interval = setInterval(() => {
-                    // Do 4 swaps per tick
                     for (let n = 0; n < 4 && idx < swaps.length; n++, idx++) {
                         const [i, j] = swaps[idx];
                         [chars[i], chars[j]] = [chars[j], chars[i]];
@@ -1132,7 +1296,16 @@
                         fadeToWhite();
                     }
                 }, 16);
-            }, 50); // 50ms delay lets browser paint first
+            }
+
+            // Kick off the animation sequence
+            setTimeout(() => {
+                // Start flicker sequence, begin sorting partway through
+                startFlickerSequence();
+                startColorSwitching();
+                // Start sorting after a short delay (while some letters are still flickering)
+                setTimeout(startSorting, 500);
+            }, 50);
         })();
 
         // Enable animations (paused initially to prevent re-triggering on focus change)
@@ -1164,6 +1337,7 @@
             const satelliteLabel = document.getElementById('satelliteLabel');
             const plotPanel = document.getElementById('plotPanel');
             const starfieldBg = document.getElementById('starfieldBg');
+            const earthScrollContainer = document.getElementById('earthScrollContainer');
 
             // Shared state for satellite tilt (updated by scroll, read by animation loop)
             window.satelliteScrollTilt = 0;
@@ -1222,6 +1396,16 @@
                             starfieldBg.style.transform = `translateY(${clampedOffset}px)`;
                         }
                     }
+                }
+
+                // 3. Earth section zoom animation
+                if (earthScrollContainer && window.earthViewer) {
+                    const earthRect = earthScrollContainer.getBoundingClientRect();
+                    const earthScrollDistance = earthRect.height - viewportHeight;
+                    const earthScrolled = -earthRect.top;
+                    const earthProgress = Math.max(0, Math.min(1, earthScrolled / earthScrollDistance));
+
+                    window.earthViewer.setZoomProgress(earthProgress);
                 }
 
                 lastScrollY = scrollY;
@@ -1478,6 +1662,8 @@
 
     <!-- Wave effect module -->
     <script src="waves.js"></script>
+    <!-- Earth viewer module -->
+    <script src="earth/earth.js"></script>
     <script>
         // Initialize wave effect when page loads
         window.addEventListener('load', () => {
@@ -1515,6 +1701,36 @@
 
             // Initialize satellite viewer
             initSatelliteViewer();
+
+            // Initialize Earth viewer
+            if (typeof EarthViewer !== 'undefined') {
+                window.earthViewer = new EarthViewer();
+                window.earthViewer.init();
+                console.log('EarthViewer initialized');
+
+                // Set up debug controls
+                const toggleEarth = document.getElementById('toggleEarth');
+                const toggleClouds = document.getElementById('toggleClouds');
+                const toggleAtmosphere = document.getElementById('toggleAtmosphere');
+
+                if (toggleEarth) {
+                    toggleEarth.addEventListener('change', (e) => {
+                        window.earthViewer.toggleEarth(e.target.checked);
+                    });
+                }
+                if (toggleClouds) {
+                    toggleClouds.addEventListener('change', (e) => {
+                        window.earthViewer.toggleClouds(e.target.checked);
+                    });
+                }
+                if (toggleAtmosphere) {
+                    toggleAtmosphere.addEventListener('change', (e) => {
+                        window.earthViewer.toggleAtmosphere(e.target.checked);
+                    });
+                }
+            } else {
+                console.error('EarthViewer not loaded!');
+            }
 
             // Initialize scroll-driven animation
             initScrollDrivenAnimation();
@@ -1638,16 +1854,32 @@
         function initScrollDrivenAnimation() {
             // All scroll handling is done by the unified scroll handler
             // This function only sets up the IntersectionObserver for starfield visibility
-            const scrollContainer = document.getElementById('satelliteScrollContainer');
+            const satelliteContainer = document.getElementById('satelliteScrollContainer');
+            const earthContainer = document.getElementById('earthScrollContainer');
             const starfieldBg = document.getElementById('starfieldBg');
 
-            if (starfieldBg && scrollContainer) {
+            if (starfieldBg) {
+                // Track visibility of both sections
+                let satelliteVisible = false;
+                let earthVisible = false;
+
+                const updateStarfieldVisibility = () => {
+                    starfieldBg.classList.toggle('visible', satelliteVisible || earthVisible);
+                };
+
                 const starfieldObserver = new IntersectionObserver((entries) => {
                     entries.forEach(entry => {
-                        starfieldBg.classList.toggle('visible', entry.isIntersecting);
+                        if (entry.target === satelliteContainer) {
+                            satelliteVisible = entry.isIntersecting;
+                        } else if (entry.target === earthContainer) {
+                            earthVisible = entry.isIntersecting;
+                        }
                     });
+                    updateStarfieldVisibility();
                 }, { threshold: 0 });
-                starfieldObserver.observe(scrollContainer);
+
+                if (satelliteContainer) starfieldObserver.observe(satelliteContainer);
+                if (earthContainer) starfieldObserver.observe(earthContainer);
             }
         }
 
