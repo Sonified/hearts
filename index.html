@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The HEARTS Project</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌎</text></svg>">
+    <!-- Preload satellite model + starfield (auto priority - loads before Earth) -->
+    <link rel="preload" href="Advanced%20Composition%20Explorer.glb" as="fetch" crossorigin>
+    <link rel="preload" href="Starfield.jpg" as="image">
+    <!-- Preload Earth textures (low priority - after satellite/starfield) -->
+    <link rel="preload" href="earth/textures/Albedo.jpg" as="image" fetchpriority="low">
+    <link rel="preload" href="earth/textures/Bump.jpg" as="image" fetchpriority="low">
+    <link rel="preload" href="earth/textures/Clouds.png" as="image" fetchpriority="low">
+    <link rel="preload" href="earth/textures/Ocean.png" as="image" fetchpriority="low">
+    <link rel="preload" href="earth/textures/night_lights_modified.png" as="image" fetchpriority="low">
     <style>
         * {
             margin: 0;
@@ -317,6 +326,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
+            z-index: 1; /* Stay above fixed video */
         }
 
         .numbers-container {
@@ -521,13 +532,37 @@
 
         .video-section {
             width: 100%;
-            background: #000;
+            background: transparent;
             position: relative;
             z-index: 1;
+            height: 100vh;
         }
 
-        .video-section video {
+        .video-fixed {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
+            height: 100vh;
+            z-index: 0;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+
+        .video-fixed .audio-control,
+        .video-fixed .video-scroll-indicator {
+            pointer-events: auto;
+        }
+
+        .video-fixed.visible {
+            opacity: 1;
+        }
+
+        .video-fixed video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
             display: block;
         }
 
@@ -817,9 +852,10 @@
 
         /* Earth zoom section */
         .earth-scroll-container {
-            height: 300vh; /* Scroll distance for zoom animation */
+            height: 320vh; /* Scroll distance for zoom animation */
             position: relative;
             background: transparent;
+            z-index: 1; /* Stay above fixed video */
         }
 
         .earth-sticky {
@@ -887,6 +923,30 @@
             margin-right: 10px;
             width: 16px;
             height: 16px;
+        }
+
+        .earth-debug-controls .slider-group {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .earth-debug-controls .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 4px;
+            color: #aaa;
+        }
+
+        .earth-debug-controls .slider-value {
+            color: #60a5fa;
+            font-family: monospace;
+        }
+
+        .earth-debug-controls input[type="range"] {
+            width: 100%;
+            margin-bottom: 8px;
         }
 
         .earth-label h3 {
@@ -980,11 +1040,22 @@
                 <label><input type="checkbox" id="toggleEarth" checked> Earth</label>
                 <label><input type="checkbox" id="toggleClouds" checked> Clouds</label>
                 <label><input type="checkbox" id="toggleAtmosphere" checked> Atmosphere</label>
+                <div class="slider-group">
+                    <div class="slider-label"><span>Cam Y</span><span class="slider-value" id="yValue">1.7</span></div>
+                    <input type="range" id="sliderY" min="-2" max="3" step="0.05" value="1.7">
+                    <div class="slider-label"><span>Cam X</span><span class="slider-value" id="xValue">1.2</span></div>
+                    <input type="range" id="sliderX" min="-2" max="3" step="0.05" value="1.2">
+                    <div class="slider-label"><span>Zoom (Z)</span><span class="slider-value" id="zValue">1.00</span></div>
+                    <input type="range" id="sliderZ" min="1.0" max="5" step="0.05" value="1.0">
+                    <div class="slider-label"><span>Look Y (tilt)</span><span class="slider-value" id="lookYValue">1.25</span></div>
+                    <input type="range" id="sliderLookY" min="-2" max="3" step="0.05" value="1.25">
+                </div>
             </div>
         </div>
     </div>
 
-    <section class="video-section" id="videoSection">
+    <!-- Fixed video layer with overlays (shows through Earth fade) -->
+    <div class="video-fixed" id="videoFixed">
         <video id="kilaueavideo" autoplay loop muted playsinline>
             <source src="v1_midnight_2x_trimmed_8s-23s_850p_crf30_audio+1.75s.mp4" type="video/mp4">
         </video>
@@ -1012,14 +1083,14 @@
                 <div class="volume-bar"></div>
             </div>
         </div>
-        <!-- Old Listen button (commented out)
-        <button class="audio-toggle" id="audioToggle">Listen</button>
-        -->
         <div class="video-scroll-indicator" id="videoScrollIndicator">
             <span class="video-scroll-text">Live data feed</span>
             <div class="chevron"></div>
         </div>
-    </section>
+    </div>
+
+    <!-- Spacer section for video viewing time before next content -->
+    <section class="video-section" id="videoSection"></section>
 
     <section class="image-text-section">
         <div class="image-text-container">
@@ -1398,14 +1469,27 @@
                     }
                 }
 
-                // 3. Earth section zoom animation
+                // 3. Earth section zoom animation (starts as soon as section enters viewport)
                 if (earthScrollContainer && window.earthViewer) {
                     const earthRect = earthScrollContainer.getBoundingClientRect();
-                    const earthScrollDistance = earthRect.height - viewportHeight;
-                    const earthScrolled = -earthRect.top;
-                    const earthProgress = Math.max(0, Math.min(1, earthScrolled / earthScrollDistance));
+                    const earthScrolled = viewportHeight - earthRect.top + viewportHeight * 0.2;
+                    const earthProgress = Math.max(0, Math.min(1, earthScrolled / earthRect.height));
 
                     window.earthViewer.setZoomProgress(earthProgress);
+
+                    // Disable pointer events after crossfade so video controls are clickable
+                    earthScrollContainer.style.pointerEvents = earthProgress > 0.82 ? 'none' : '';
+
+                    // Parallax "weight" effect - Earth starts high, settles slowly (heavy feel)
+                    const enterRatio = Math.max(0, Math.min(1, earthRect.top / viewportHeight));
+                    const weightOffset = enterRatio * -600; // starts 600px above, settles to 0
+                    // Nudge canvas down at start so atmosphere doesn't clip top edge (gone by 33%)
+                    const settleDown = Math.max(0, 1 - earthProgress * 3) * 160;
+                    window.earthViewer.canvas.style.transform = `translateY(${weightOffset + settleDown}px)`;
+
+                    // Tilt down during phase 1 (0-0.65): 1.25 → 0.3
+                    const tiltProgress = Math.min(1, earthProgress / 0.65);
+                    window.earthViewer.lookAtY = 1.25 - tiltProgress * 0.95;
                 }
 
                 lastScrollY = scrollY;
@@ -1503,12 +1587,13 @@
         // Cinematic overlay sequence
         (function initCinematicOverlay() {
             const video = document.getElementById('kilaueavideo');
+            const videoFixed = document.getElementById('videoFixed');
             const videoSection = document.getElementById('videoSection');
             const overlayContext = document.getElementById('overlayContext');
             const audioControl = document.getElementById('audioControl');
             const volumeBars = audioControl ? audioControl.querySelectorAll('.volume-bar') : [];
 
-            if (!video || !videoSection || !overlayContext || !audioControl) return;
+            if (!video || !overlayContext || !audioControl) return;
 
             let sequenceTimers = [];
             let sequenceStarted = false;
@@ -1539,7 +1624,7 @@
 
             let isMuted = true;
 
-            // Initialize audio visualizer when section becomes visible
+            // Initialize audio visualizer
             function initAudioVisualizer() {
                 if (window.AudioVisualizer && !audioVisualizer) {
                     audioVisualizer = new AudioVisualizer(video, volumeBars);
@@ -1548,7 +1633,7 @@
                 }
             }
 
-            // Audio control click handler - toggles output mute, not analysis
+            // Audio control click handler
             audioControl.addEventListener('click', () => {
                 isMuted = !isMuted;
                 if (!isMuted) {
@@ -1561,26 +1646,34 @@
                 }
             });
 
-            // Start sequence when video section is visible
-            const sequenceObserver = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        startSequence();
-                        // Initialize visualizer when visible
-                        initAudioVisualizer();
-                    } else {
-                        // Just mute audio when leaving, keep UI visible
-                        isMuted = true;
-                        audioControl.classList.remove('unmuted');
-                        if (audioVisualizer) {
-                            audioVisualizer.setMuted(true);
-                            audioVisualizer.stop();
-                        }
-                    }
-                });
-            }, { threshold: 0.5 });
+            // Triggered by Earth viewer when video is revealed
+            window.addEventListener('earthVideoRevealed', () => {
+                startSequence();
+                initAudioVisualizer();
+            });
 
-            sequenceObserver.observe(videoSection);
+            // Show/hide video when entering/leaving video section
+            if (videoSection) {
+                const sectionObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            // Entering video section - show video and overlays
+                            if (videoFixed) videoFixed.classList.add('visible');
+                            startSequence();
+                            initAudioVisualizer();
+                        } else {
+                            // Left video section - mute audio but keep overlays visible
+                            isMuted = true;
+                            audioControl.classList.remove('unmuted');
+                            if (audioVisualizer) {
+                                audioVisualizer.setMuted(true);
+                            }
+                        }
+                    });
+                }, { threshold: 0 });
+
+                sectionObserver.observe(videoSection);
+            }
         })();
 
         /* Old audio toggle (commented out)
@@ -1728,6 +1821,36 @@
                         window.earthViewer.toggleAtmosphere(e.target.checked);
                     });
                 }
+
+                // Camera position sliders
+                const sliderY = document.getElementById('sliderY');
+                const sliderZ = document.getElementById('sliderZ');
+                const sliderX = document.getElementById('sliderX');
+                const sliderLookY = document.getElementById('sliderLookY');
+                const yValue = document.getElementById('yValue');
+                const zValue = document.getElementById('zValue');
+                const xValue = document.getElementById('xValue');
+                const lookYValue = document.getElementById('lookYValue');
+
+                function updateCameraStart() {
+                    const x = parseFloat(sliderX.value);
+                    const y = parseFloat(sliderY.value);
+                    const z = parseFloat(sliderZ.value);
+                    const lookY = parseFloat(sliderLookY.value);
+                    window.earthViewer.cameraStart.set(x, y, z);
+                    window.earthViewer.lookAtY = lookY;
+                    window.earthViewer.setZoomProgress(window.earthViewer.zoomProgress);
+                    window.earthViewer.renderer.render(window.earthViewer.scene, window.earthViewer.camera);
+                    xValue.textContent = x.toFixed(2);
+                    yValue.textContent = y.toFixed(2);
+                    zValue.textContent = z.toFixed(2);
+                    lookYValue.textContent = lookY.toFixed(2);
+                }
+
+                if (sliderY) sliderY.addEventListener('input', updateCameraStart);
+                if (sliderZ) sliderZ.addEventListener('input', updateCameraStart);
+                if (sliderX) sliderX.addEventListener('input', updateCameraStart);
+                if (sliderLookY) sliderLookY.addEventListener('input', updateCameraStart);
             } else {
                 console.error('EarthViewer not loaded!');
             }

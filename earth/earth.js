@@ -13,7 +13,7 @@ class EarthViewer {
             texturesPath: 'earth/textures/',
             earthRadius: 1,
             atmosphereRadius: 1.25, // Franky uses 12.5 for Earth radius 10 = 1.25x
-            initialCameraZ: 2.5,
+            initialCameraZ: 1.0,
             sunIntensity: 1.3,
             // Zoom target: Kīlauea, Hawaii
             targetLat: 19.4069,
@@ -40,8 +40,9 @@ class EarthViewer {
         this.zoomProgress = 0;
 
         // Camera animation state - start up and right
-        this.cameraStart = new THREE.Vector3(1.2, 1.7, this.config.initialCameraZ);
+        this.cameraStart = new THREE.Vector3(1.2, 1.3, this.config.initialCameraZ);
         this.cameraEnd = null; // Will be set after calculating Kilauea position
+        this.lookAtY = 1.25; // Vertical offset for camera look target (tilt)
     }
 
     init() {
@@ -53,8 +54,11 @@ class EarthViewer {
         }
 
         this.canvas = canvas;
+        this.canvas.style.opacity = '0'; // Hidden until textures loaded
         this.container = container;
         this.label = document.getElementById(this.config.labelId);
+        this.videoFixed = document.getElementById('videoFixed');
+        this.texturesReady = false;
 
         this.setupScene();
         this.setupCamera();
@@ -112,8 +116,22 @@ class EarthViewer {
     }
 
     loadTextures() {
-        const loader = new THREE.TextureLoader();
         const path = this.config.texturesPath;
+
+        // Use LoadingManager to know when all textures are GPU-ready
+        const manager = new THREE.LoadingManager();
+        manager.onLoad = () => {
+            console.log('Earth textures loaded');
+            this.texturesReady = true;
+            // Apply current zoom progress before first render
+            this.setZoomProgress(this.zoomProgress);
+            // Render one frame immediately so GPU has content ready
+            this.renderer.render(this.scene, this.camera);
+            // Fade in the canvas
+            this.canvas.style.opacity = '1';
+        };
+
+        const loader = new THREE.TextureLoader(manager);
 
         // Load all textures
         const albedoMap = loader.load(path + 'Albedo.jpg');
@@ -281,8 +299,9 @@ class EarthViewer {
 
     calculateCameraEndPosition() {
         // Zoom toward Hawaii: up (positive Y) to hit the islands not the ocean below
-        // Start at z=4, end at z=1.2
         this.cameraEnd = new THREE.Vector3(0.15, 0.45, 1.2);
+        // Final position: zoom straight down toward surface during crossfade
+        this.cameraFinal = new THREE.Vector3(0.11, 0.32, 0.9);
     }
 
     setZoomProgress(progress) {
@@ -290,41 +309,85 @@ class EarthViewer {
 
         if (!this.camera || !this.cameraEnd || !this.earthGroup) return;
 
-        // Ease function for smooth camera movement
-        const eased = this.easeInOutCubic(progress);
+        const PHASE_SPLIT = 0.65; // Phase 1 ends, phase 2 (zoom-down) begins
 
-        // Interpolate camera position
-        this.camera.position.lerpVectors(this.cameraStart, this.cameraEnd, eased);
+        if (progress <= PHASE_SPLIT) {
+            // Phase 1: Zoom from space to Hawaii centered
+            const phase1Progress = progress / PHASE_SPLIT;
+            const eased = this.easeInOutCubic(phase1Progress);
 
-        // Interpolate Earth rotation from US to Hawaii
-        const startRot = this.config.initialRotationY;
-        const endRot = this.config.endRotationY;
-        this.earthGroup.rotation.y = startRot + (endRot - startRot) * eased;
+            this.camera.position.lerpVectors(this.cameraStart, this.cameraEnd, eased);
 
-        // Look at Earth center (with slight adjustment toward target as we zoom)
-        const lookTarget = new THREE.Vector3(0, 0, 0);
-        this.camera.lookAt(lookTarget);
+            // Interpolate Earth rotation from US to Hawaii
+            const startRot = this.config.initialRotationY;
+            const endRot = this.config.endRotationY;
+            this.earthGroup.rotation.y = startRot + (endRot - startRot) * eased;
+
+            // Look at Earth center with tilt offset (levels out as we zoom in)
+            const lookY = this.lookAtY * (1 - eased);
+            this.camera.lookAt(new THREE.Vector3(0, lookY, 0));
+        } else {
+            // Phase 2: Zoom straight down toward surface
+            const phase2Progress = (progress - PHASE_SPLIT) / (1 - PHASE_SPLIT);
+            const eased = 1 - Math.pow(1 - phase2Progress, 2); // ease-out (decelerating)
+
+            this.camera.position.lerpVectors(this.cameraEnd, this.cameraFinal, eased);
+
+            // Keep rotation at end position
+            this.earthGroup.rotation.y = this.config.endRotationY;
+
+            // Look straight at Earth center
+            this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+        }
 
         // Label visibility
         if (this.label) {
-            if (progress < 0.15) {
+            if (progress < 0.1) {
                 this.label.classList.add('visible');
             } else {
                 this.label.classList.remove('visible');
             }
         }
 
-        // Fade canvas at end for transition to video
-        if (progress > 0.85) {
-            const fadeProgress = (progress - 0.85) / 0.15;
-            this.canvas.style.opacity = 1 - fadeProgress;
-        } else {
-            this.canvas.style.opacity = 1;
+        // Fade canvas for transition to video (only if textures loaded)
+        if (this.texturesReady) {
+            if (progress > 0.7) {
+                const fadeProgress = Math.min(1, (progress - 0.7) / 0.12);
+                this.canvas.style.opacity = 1 - fadeProgress;
+            } else {
+                this.canvas.style.opacity = 1;
+            }
+        }
+
+        // Show video behind Earth as it fades
+        if (this.videoFixed) {
+            if (progress > 0.65) {
+                this.videoFixed.classList.add('visible');
+                // Trigger video overlay sequence when video is clearly visible
+                if (progress > 0.82 && !this.videoOverlayTriggered) {
+                    this.videoOverlayTriggered = true;
+                    window.dispatchEvent(new CustomEvent('earthVideoRevealed'));
+                }
+            } else {
+                this.videoFixed.classList.remove('visible');
+                this.videoOverlayTriggered = false;
+            }
         }
     }
 
     easeInOutCubic(t) {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        // Phase 1 (0-0.33): Earth entering frame - barely any movement (heavy/gravitational)
+        // Phase 2 (0.33-1.0): Zoom in with ease-in-out
+        if (t < 0.33) {
+            // Entering phase: only 5% of animation happens here (very slow drift)
+            const p = t / 0.33;
+            return 0.05 * (p * p);
+        } else {
+            // Zoom phase: remaining 95% with smooth ease-in-out
+            const p = (t - 0.33) / 0.67;
+            const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+            return 0.05 + 0.95 * eased;
+        }
     }
 
     setupVisibilityObserver() {
