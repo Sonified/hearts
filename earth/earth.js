@@ -4,13 +4,25 @@
  * Adapted for HEARTS project scroll-driven animation
  */
 
+/**
+ * Pick a texture tier by device class.
+ * Phones get the 1024px set, everything else the 2048px set.
+ * Kept deliberately dumb: viewport width OR a mobile UA string.
+ */
+function pickTextureTier() {
+    const isSmallViewport = window.matchMedia('(max-width: 820px)').matches;
+    const isMobileUA = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    return (isSmallViewport || isMobileUA) ? 'mobile' : 'hd';
+}
+
 class EarthViewer {
     constructor(config = {}) {
+        this.textureTier = pickTextureTier();
         this.config = {
             canvasId: 'earth-canvas',
             containerId: 'earthScrollContainer',
             labelId: 'earthLabel',
-            texturesPath: 'earth/textures/',
+            texturesPath: 'earth/textures/' + this.textureTier + '/',
             earthRadius: 1,
             atmosphereRadius: 1.25, // Franky uses 12.5 for Earth radius 10 = 1.25x
             initialCameraZ: 1.0,
@@ -68,7 +80,7 @@ class EarthViewer {
         this.setupVisibilityObserver();
         this.setupResizeHandler();
 
-        console.log('Earth viewer initialized');
+        console.log('Earth viewer initialized (texture tier: ' + this.textureTier + ')');
     }
 
     setupScene() {
@@ -133,12 +145,13 @@ class EarthViewer {
 
         const loader = new THREE.TextureLoader(manager);
 
-        // Load all textures
+        // Load all textures (all JPEG - none of these need an alpha channel:
+        // Clouds/Ocean are sampled via .g/.b, night lights is grayscale)
         const albedoMap = loader.load(path + 'Albedo.jpg');
         const bumpMap = loader.load(path + 'Bump.jpg');
-        const cloudsMap = loader.load(path + 'Clouds.png');
-        const oceanMap = loader.load(path + 'Ocean.png');
-        const lightsMap = loader.load(path + 'night_lights_modified.png');
+        const cloudsMap = loader.load(path + 'Clouds.jpg');
+        const oceanMap = loader.load(path + 'Ocean.jpg');
+        const lightsMap = loader.load(path + 'night_lights_modified.jpg');
 
         // Set color space for color textures (r128 uses encoding, newer uses colorSpace)
         if (albedoMap.colorSpace !== undefined) {

@@ -7,13 +7,14 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌎</text></svg>">
     <!-- Preload satellite model + starfield (auto priority - loads before Earth) -->
     <link rel="preload" href="Advanced%20Composition%20Explorer.glb" as="fetch" crossorigin>
-    <link rel="preload" href="Starfield.jpg" as="image">
-    <!-- Preload Earth textures (low priority - after satellite/starfield) -->
-    <link rel="preload" href="earth/textures/Albedo.jpg" as="image" fetchpriority="low">
-    <link rel="preload" href="earth/textures/Bump.jpg" as="image" fetchpriority="low">
-    <link rel="preload" href="earth/textures/Clouds.png" as="image" fetchpriority="low">
-    <link rel="preload" href="earth/textures/Ocean.png" as="image" fetchpriority="low">
-    <link rel="preload" href="earth/textures/night_lights_modified.png" as="image" fetchpriority="low">
+    <link rel="preload" href="Starfield-2560.jpg" as="image" media="(min-width: 821px)">
+    <link rel="preload" href="Starfield-1280.jpg" as="image" media="(max-width: 820px)">
+    <!--
+      Earth textures are deliberately NOT preloaded. They are fetched lazily by
+      earth/earth.js when the Earth section approaches the viewport, and the
+      device-appropriate tier (hd/ vs mobile/) is chosen at runtime - preloading
+      here would pull down the wrong set and hold it in memory from first paint.
+    -->
     <style>
         * {
             margin: 0;
@@ -396,7 +397,7 @@
             left: 0;
             width: 100%;
             height: 180vh; /* Extra height for parallax movement */
-            background-image: url('Starfield.jpg');
+            background-image: url('Starfield-2560.jpg');
             background-size: cover;
             background-position: center;
             z-index: 0;
@@ -410,6 +411,14 @@
 
         .starfield-bg.visible {
             opacity: 1;
+        }
+
+        /* Phones get the 1280px starfield - a decoded 2560px image is ~15MB of
+           memory for a layer that is never shown wider than ~430 CSS px. */
+        @media (max-width: 820px) {
+            .starfield-bg {
+                background-image: url('Starfield-1280.jpg');
+            }
         }
 
         .satellite-panel {
@@ -887,8 +896,9 @@
             opacity: 1;
         }
 
-        /* Earth debug controls */
+        /* Earth debug controls - hidden in production, shown with ?debug=1 */
         .earth-debug-controls {
+            display: none;
             position: absolute;
             top: 20px;
             right: 20px;
@@ -947,6 +957,10 @@
         .earth-debug-controls input[type="range"] {
             width: 100%;
             margin-bottom: 8px;
+        }
+
+        .earth-debug-controls.debug-visible {
+            display: block;
         }
 
         .earth-label h3 {
@@ -1034,7 +1048,7 @@
                 <h3>Earth</h3>
                 <p>Real-time connection between space weather and terrestrial phenomena.</p>
             </div>
-            <!-- Debug controls -->
+            <!-- Debug controls: hidden by default, add ?debug=1 to the URL to show -->
             <div class="earth-debug-controls" id="earthDebugControls">
                 <h4>Layers</h4>
                 <label><input type="checkbox" id="toggleEarth" checked> Earth</label>
@@ -1056,7 +1070,11 @@
 
     <!-- Fixed video layer with overlays (shows through Earth fade) -->
     <div class="video-fixed" id="videoFixed">
-        <video id="kilaueavideo" autoplay loop muted playsinline preload="auto" poster="https://cdn.now.audio/hearts/videos/kilauea-v1-poster.jpg">
+        <!-- crossorigin="anonymous" is REQUIRED: the video is served from cdn.now.audio and
+             audio-visualizer.js pipes it through createMediaElementSource(). Without CORS the
+             media element is tainted and Web Audio silently outputs zeros. The CDN sends
+             access-control-allow-origin: * for both the mp4 and the poster. -->
+        <video id="kilaueavideo" crossorigin="anonymous" autoplay loop muted playsinline preload="auto" poster="https://cdn.now.audio/hearts/videos/kilauea-v1-poster.jpg">
             <source src="https://cdn.now.audio/hearts/videos/kilauea-v1-faststart.mp4" type="video/mp4">
         </video>
         <!-- Cinematic overlay sequence -->
@@ -1502,6 +1520,10 @@
                 }
             }, { passive: true });
 
+            // Exposed so the lazily-created EarthViewer can sync to the current
+            // scroll position the moment it initializes.
+            window.updateEarthZoomFromScroll = handleScroll;
+
             // Initial call
             handleScroll();
         })();
@@ -1795,11 +1817,64 @@
             // Initialize satellite viewer
             initSatelliteViewer();
 
-            // Initialize Earth viewer
+            // Initialize Earth viewer lazily - creating the WebGL context and
+            // pulling its textures up front is what pushed iOS Safari over its
+            // per-tab memory budget. Defer until the section is ~1.5 viewports away.
+            initEarthViewerWhenNear();
+
+            // Initialize scroll-driven animation
+            initScrollDrivenAnimation();
+
+            // Initialize dummy plot
+            initDummyPlot();
+        });
+
+        function initEarthViewerWhenNear() {
+            const container = document.getElementById('earthScrollContainer');
+            if (!container) return;
+
+            let started = false;
+            const start = () => {
+                if (started) return;
+                started = true;
+                setupEarthViewer();
+            };
+
+            if (!('IntersectionObserver' in window)) {
+                start();
+                return;
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                if (entries.some(e => e.isIntersecting)) {
+                    observer.disconnect();
+                    start();
+                }
+            }, { rootMargin: '150% 0px 150% 0px' });
+
+            observer.observe(container);
+        }
+
+        function setupEarthViewer() {
             if (typeof EarthViewer !== 'undefined') {
                 window.earthViewer = new EarthViewer();
                 window.earthViewer.init();
                 console.log('EarthViewer initialized');
+
+                // Sync the viewer to the current scroll position, since we may
+                // have initialized after the user already scrolled part-way in.
+                if (typeof window.updateEarthZoomFromScroll === 'function') {
+                    window.updateEarthZoomFromScroll();
+                }
+
+                // Debug controls are opt-in via ?debug=1
+                const debugEnabled = new URLSearchParams(window.location.search).get('debug') === '1';
+                const debugPanel = document.getElementById('earthDebugControls');
+                if (!debugEnabled) {
+                    if (debugPanel) debugPanel.remove();
+                    return;
+                }
+                if (debugPanel) debugPanel.classList.add('debug-visible');
 
                 // Set up debug controls
                 const toggleEarth = document.getElementById('toggleEarth');
@@ -1854,13 +1929,7 @@
             } else {
                 console.error('EarthViewer not loaded!');
             }
-
-            // Initialize scroll-driven animation
-            initScrollDrivenAnimation();
-
-            // Initialize dummy plot
-            initDummyPlot();
-        });
+        }
 
         function initSatelliteViewer() {
             const canvas = document.getElementById('satellite-canvas');
