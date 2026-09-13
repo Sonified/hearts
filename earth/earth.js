@@ -5,8 +5,36 @@
  */
 
 /**
+ * Texture sets, sized per texture rather than one resolution per device.
+ *
+ * Albedo carries the terrain and is the only map the scroll actually zooms
+ * into, so it stays at 4096 on BOTH tiers - at 1024 an equirectangular
+ * whole-Earth map gives Hawaii only a handful of texels and the island
+ * dissolves into blocks at the deepest keyframe. Bump backs up that relief at
+ * 2048 everywhere. Clouds/Ocean/NightLights are broad, low-frequency layers
+ * that never get magnified the same way, so phones halve them.
+ *
+ * Decoded RGBA + mipmaps: desktop ~100MB, phone ~65MB (was ~1378MB).
+ */
+const EARTH_TEXTURE_SETS = {
+    hd: {
+        albedo: 'Albedo-4096.jpg',
+        bump:   'Bump-2048.jpg',
+        clouds: 'Clouds-2048.jpg',
+        ocean:  'Ocean-2048.jpg',
+        lights: 'NightLights-2048.jpg'
+    },
+    mobile: {
+        albedo: 'Albedo-4096.jpg',
+        bump:   'Bump-2048.jpg',
+        clouds: 'Clouds-1024.jpg',
+        ocean:  'Ocean-1024.jpg',
+        lights: 'NightLights-1024.jpg'
+    }
+};
+
+/**
  * Pick a texture tier by device class.
- * Phones get the 1024px set, everything else the 2048px set.
  * Kept deliberately dumb: viewport width OR a mobile UA string.
  */
 function pickTextureTier() {
@@ -18,11 +46,12 @@ function pickTextureTier() {
 class EarthViewer {
     constructor(config = {}) {
         this.textureTier = pickTextureTier();
+        this.textureSet = EARTH_TEXTURE_SETS[this.textureTier];
         this.config = {
             canvasId: 'earth-canvas',
             containerId: 'earthScrollContainer',
             labelId: 'earthLabel',
-            texturesPath: 'earth/textures/' + this.textureTier + '/',
+            texturesPath: 'earth/textures/',
             earthRadius: 1,
             atmosphereRadius: 1.25, // Franky uses 12.5 for Earth radius 10 = 1.25x
             initialCameraZ: 1.0,
@@ -147,11 +176,12 @@ class EarthViewer {
 
         // Load all textures (all JPEG - none of these need an alpha channel:
         // Clouds/Ocean are sampled via .g/.b, night lights is grayscale)
-        const albedoMap = loader.load(path + 'Albedo.jpg');
-        const bumpMap = loader.load(path + 'Bump.jpg');
-        const cloudsMap = loader.load(path + 'Clouds.jpg');
-        const oceanMap = loader.load(path + 'Ocean.jpg');
-        const lightsMap = loader.load(path + 'night_lights_modified.jpg');
+        const set = this.textureSet;
+        const albedoMap = loader.load(path + set.albedo);
+        const bumpMap = loader.load(path + set.bump);
+        const cloudsMap = loader.load(path + set.clouds);
+        const oceanMap = loader.load(path + set.ocean);
+        const lightsMap = loader.load(path + set.lights);
 
         // Set color space for color textures (r128 uses encoding, newer uses colorSpace)
         if (albedoMap.colorSpace !== undefined) {
