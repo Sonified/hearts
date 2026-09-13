@@ -626,7 +626,6 @@
             pointer-events: none;
         }
 
-        .video-fixed .audio-control,
         .video-fixed .video-scroll-indicator,
         .video-fixed video {
             /* The video needs to receive taps so the tap-to-play fallback works
@@ -728,24 +727,33 @@
         }
 
         /* Audio control: mute toggle on the left, volume slider on the right.
-           Every interactive part is sized to a >=44px touch target. */
+           Every interactive part is sized to a >=44px touch target.
+
+           It lives at the top level rather than inside .video-fixed. That
+           layer has z-index 0 and .earth-scroll-container has z-index 1, so a
+           control nested inside it was painted underneath the Earth canvas and
+           could not be clicked until the Earth's pointer-events were switched
+           off late in the scroll. Fixed positioning here reproduces the old
+           geometry exactly (.video-fixed was a full-viewport fixed box). */
         .audio-control {
-            position: absolute;
+            position: fixed;
             top: 32%;
             left: 50%;
             transform: translateX(-50%) translateY(30px);
             display: flex;
             align-items: center;
             gap: 10px;
-            /* Absolutely positioned at left:50%, so shrink-to-fit would clamp the
-               box to the right half of the viewport and overlap the children on
+            /* Positioned at left:50%, so shrink-to-fit would clamp the box to
+               the right half of the viewport and overlap the children on
                narrow screens. max-content sizes to the controls instead. */
             width: max-content;
-            z-index: 10;
+            z-index: 50;
             padding: 8px 18px 8px 8px;
             background: rgba(0, 0, 0, 0.4);
             border-radius: 14px;
             opacity: 0;
+            /* Invisible means inert; see .visible below. */
+            pointer-events: none;
             transition: opacity 1.5s ease, transform 1.5s ease, background 0.3s ease;
             --accent: #f97316;
             --fill: 50%;
@@ -755,8 +763,12 @@
             transform: translateX(-50%) translateY(0);
         }
 
+        /* Visible means interactable: .visible is added at the START of the
+           1.5s fade, so the control accepts clicks the moment it begins to
+           appear, not when the transition finishes. */
         .audio-control.visible {
             opacity: 1;
+            pointer-events: auto;
         }
 
         .audio-control:hover {
@@ -952,9 +964,27 @@
                 white-space: normal;
             }
 
+            /* Phones: park the control in thumb reach at the bottom of the
+               viewport, clear of the iOS Safari toolbar and home indicator. */
             .audio-control {
-                top: 45%;
+                top: auto;
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
                 padding: 8px 16px 8px 8px;
+            }
+
+            /* Move the scroll hint above the control so they don't collide. */
+            .video-scroll-indicator {
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
+            }
+
+            /* Trim the dead scroll after the volcano video. This section is a
+               pure spacer - a full extra viewport of nothing but the fixed
+               video, on top of the ~1.2 viewports of earth-scroll-container
+               tail that already play after the zoom completes. That tail is
+               load-bearing (it keeps .earth-sticky pinned through the tuned
+               zoom) so it is left alone; this cushion is not. */
+            .video-section {
+                height: 20vh;
             }
 
             .speaker-icon {
@@ -1190,28 +1220,31 @@
         <div class="video-overlay-sequence">
             <div class="overlay-context" id="overlayContext">December 6, 2024: Mt. Kīlauea erupts with 1,000-foot lava fountains.</div>
         </div>
-        <!-- Audio control -->
-        <div class="audio-control" id="audioControl">
-            <button class="audio-toggle" id="audioToggle" type="button" aria-label="Unmute video" aria-pressed="false">
-                <span class="speaker-icon">
-                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-                    </svg>
-                    <span class="speaker-mute-x" id="speakerMuteX">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
-                            <line x1="2" y1="2" x2="22" y2="22"/>
-                        </svg>
-                    </span>
-                </span>
-            </button>
-            <input class="volume-slider" id="volumeSlider" type="range"
-                   min="0" max="1" step="0.01" value="0.5"
-                   aria-label="Volume">
-        </div>
         <div class="video-scroll-indicator" id="videoScrollIndicator">
             <span class="video-scroll-text">Live data feed</span>
             <div class="chevron"></div>
         </div>
+    </div>
+
+    <!-- Audio control. Deliberately a sibling of .video-fixed, not a child:
+         .video-fixed is z-index 0 and .earth-scroll-container is z-index 1, so
+         nesting it there buried the control under the Earth canvas. -->
+    <div class="audio-control" id="audioControl">
+        <button class="audio-toggle" id="audioToggle" type="button" aria-label="Unmute video" aria-pressed="false">
+            <span class="speaker-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                </svg>
+                <span class="speaker-mute-x" id="speakerMuteX">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+                        <line x1="2" y1="2" x2="22" y2="22"/>
+                    </svg>
+                </span>
+            </span>
+        </button>
+        <input class="volume-slider" id="volumeSlider" type="range"
+               min="0" max="1" step="0.01" value="0.5"
+               aria-label="Volume">
     </div>
 
     <!-- Spacer section for video viewing time before next content -->
@@ -1602,8 +1635,10 @@
 
                     window.earthViewer.setZoomProgress(earthProgress);
 
-                    // Disable pointer events after crossfade so video controls are clickable
-                    earthScrollContainer.style.pointerEvents = earthProgress > 0.97 ? 'none' : '';
+                    // Stop the Earth layer swallowing clicks as soon as the video
+                    // is revealed (same 0.77 threshold), so the video itself is
+                    // tappable. Aligned with the reveal instead of 0.97.
+                    earthScrollContainer.style.pointerEvents = earthProgress > 0.77 ? 'none' : '';
 
                     // Parallax "weight" effect - Earth starts high, settles slowly (heavy feel)
                     const enterRatio = Math.max(0, Math.min(1, earthRect.top / viewportHeight));
@@ -1738,10 +1773,10 @@
                     overlayContext.classList.add('entered', 'visible');
                 }, 1000));
 
-                // Show audio control at 2s (after text appears)
-                sequenceTimers.push(setTimeout(() => {
-                    audioControl.classList.add('entered', 'visible');
-                }, 2000));
+                // Show the audio control immediately with the video reveal. It
+                // used to wait 2s on top of a late trigger, so it only showed
+                // up well after the video was playing.
+                audioControl.classList.add('entered', 'visible');
             }
 
             function clearSequence() {
