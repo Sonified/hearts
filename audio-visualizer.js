@@ -1,16 +1,25 @@
-// Audio Visualizer for Kilauea Video
+// Audio control for the Kilauea video.
+//
+// Routes the video through Web Audio so volume works on iOS, where the
+// HTMLMediaElement.volume property is read-only and silently ignored. All
+// level changes go through this gainNode - never video.volume.
+//
+// The video element MUST carry crossorigin="anonymous": it is served from
+// cdn.now.audio, and createMediaElementSource() on a tainted cross-origin
+// element outputs silence.
 class AudioVisualizer {
-    constructor(videoElement, volumeBars) {
+    constructor(videoElement) {
         this.video = videoElement;
-        this.bars = volumeBars;
         this.audioContext = null;
-        this.analyser = null;
         this.gainNode = null;
         this.source = null;
-        this.dataArray = null;
-        this.animationId = null;
         this.initialized = false;
         this.isMuted = true;
+
+        // Slider position, 0..1. MAX_GAIN is set so the 0.5 default reproduces
+        // the 0.12 gain this control used to apply at its single fixed level.
+        this.volume = 0.5;
+        this.MAX_GAIN = 0.24;
     }
 
     init() {
@@ -18,24 +27,18 @@ class AudioVisualizer {
 
         try {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            this.analyser = this.audioContext.createAnalyser();
-            this.analyser.fftSize = 256;
-            this.analyser.smoothingTimeConstant = 0.8;
 
-            // Create gain node for muting output while keeping analysis
             this.gainNode = this.audioContext.createGain();
             this.gainNode.gain.value = 0; // Start muted
 
             this.source = this.audioContext.createMediaElementSource(this.video);
-            // Audio flows: source -> analyser -> gain -> output
-            this.source.connect(this.analyser);
-            this.analyser.connect(this.gainNode);
+            // Audio flows: source -> gain -> output
+            this.source.connect(this.gainNode);
             this.gainNode.connect(this.audioContext.destination);
 
-            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
             this.initialized = true;
 
-            // Unmute the video element (we control volume via gainNode)
+            // Unmute the element itself; level is controlled by the gain node.
             this.video.muted = false;
         } catch (e) {
             console.warn('AudioVisualizer: Could not initialize Web Audio API', e);
@@ -45,68 +48,45 @@ class AudioVisualizer {
     start() {
         if (!this.initialized) this.init();
         if (!this.initialized) return;
-
-        // Resume audio context if suspended (browser autoplay policy)
-        if (this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
-        }
-
-        this.animate();
+        this.resumeContext();
     }
 
     stop() {
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
-            this.animationId = null;
+        // No animation loop to cancel; kept so existing callers stay valid.
+    }
+
+    // Browser autoplay policy: the context can only be resumed from a
+    // user gesture, so every interaction entry point calls this.
+    resumeContext() {
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
         }
+    }
+
+    get targetGain() {
+        return this.isMuted ? 0 : this.volume * this.MAX_GAIN;
+    }
+
+    applyGain(rampSeconds = 0.15) {
+        if (!this.gainNode || !this.audioContext) return;
+        const now = this.audioContext.currentTime;
+        this.gainNode.gain.cancelScheduledValues(now);
+        this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+        this.gainNode.gain.linearRampToValueAtTime(this.targetGain, now + rampSeconds);
     }
 
     setMuted(muted) {
         this.isMuted = muted;
-        // Resume AudioContext on user interaction (required by browser autoplay policy)
-        if (this.audioContext && this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
-        }
-        if (this.gainNode && this.audioContext) {
-            const targetValue = muted ? 0 : 0.12;
-            const now = this.audioContext.currentTime;
-            // Smooth fade over 0.3 seconds
-            this.gainNode.gain.cancelScheduledValues(now);
-            this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
-            this.gainNode.gain.linearRampToValueAtTime(targetValue, now + 0.15);
-        }
+        this.resumeContext();
+        this.applyGain(0.15);
     }
 
-    animate() {
-        this.animationId = requestAnimationFrame(() => this.animate());
-
-        if (!this.analyser || !this.dataArray) return;
-
-        this.analyser.getByteTimeDomainData(this.dataArray);
-
-        // Calculate RMS (root mean square) for actual loudness
-        let sumSquares = 0;
-        for (let i = 0; i < this.dataArray.length; i++) {
-            const normalized = (this.dataArray[i] - 128) / 128; // Center around 0
-            sumSquares += normalized * normalized;
-        }
-        const rms = Math.sqrt(sumSquares / this.dataArray.length);
-
-        // Map RMS to number of active bars (2-5)
-        // Minimum 2 bars always active for more visible motion
-        // Quiet=2, loud=3, very loud=4, REALLY loud=5
-        const activeBars = rms < 0.08 ? 2 :
-                          rms < 0.18 ? 3 :
-                          rms < 0.35 ? 4 : 5;
-
-        // Update bar states
-        this.bars.forEach((bar, index) => {
-            if (index < activeBars) {
-                bar.classList.add('active');
-            } else {
-                bar.classList.remove('active');
-            }
-        });
+    // value: 0..1 slider position
+    setVolume(value) {
+        this.volume = Math.max(0, Math.min(1, value));
+        this.resumeContext();
+        // Short ramp so dragging the slider stays smooth without lagging.
+        this.applyGain(0.05);
     }
 
     destroy() {

@@ -617,46 +617,6 @@
             margin: 0 auto;
         }
 
-        .audio-toggle {
-            position: absolute;
-            bottom: 80px;
-            right: 100px;
-            width: 100px;
-            padding: 12px 0;
-            font-size: 1rem;
-            font-weight: 600;
-            color: #fff;
-            background: rgba(220, 38, 38, 0.8);
-            border: 2px solid rgba(239, 68, 68, 1);
-            border-radius: 30px;
-            cursor: pointer;
-            z-index: 10;
-            letter-spacing: 0.05em;
-            transition: all 0.3s ease;
-            animation: pulse-glow 2s ease-in-out infinite;
-            text-align: center;
-        }
-
-        .audio-toggle:hover {
-            background: rgba(239, 68, 68, 1);
-            transform: scale(1.05);
-        }
-
-        .audio-toggle.playing {
-            background: rgba(60, 60, 80, 0.8);
-            border-color: rgba(150, 150, 170, 0.6);
-            animation: none;
-        }
-
-        @keyframes pulse-glow {
-            0%, 100% {
-                box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), 0 0 20px rgba(239, 68, 68, 0.3);
-            }
-            50% {
-                box-shadow: 0 0 20px rgba(239, 68, 68, 0.8), 0 0 40px rgba(239, 68, 68, 0.5), 0 0 60px rgba(239, 68, 68, 0.3);
-            }
-        }
-
         /* Cinematic overlay sequence */
         .video-overlay-sequence {
             position: absolute;
@@ -697,7 +657,8 @@
             opacity: 0.7;
         }
 
-        /* Audio control */
+        /* Audio control: mute toggle on the left, volume slider on the right.
+           Every interactive part is sized to a >=44px touch target. */
         .audio-control {
             position: absolute;
             top: 32%;
@@ -705,14 +666,19 @@
             transform: translateX(-50%) translateY(30px);
             display: flex;
             align-items: center;
-            gap: 12px;
-            cursor: pointer;
+            gap: 10px;
+            /* Absolutely positioned at left:50%, so shrink-to-fit would clamp the
+               box to the right half of the viewport and overlap the children on
+               narrow screens. max-content sizes to the controls instead. */
+            width: max-content;
             z-index: 10;
-            padding: 16px 24px;
+            padding: 8px 18px 8px 8px;
             background: rgba(0, 0, 0, 0.4);
-            border-radius: 12px;
+            border-radius: 14px;
             opacity: 0;
             transition: opacity 1.5s ease, transform 1.5s ease, background 0.3s ease;
+            --accent: #f97316;
+            --fill: 50%;
         }
 
         .audio-control.entered {
@@ -727,10 +693,36 @@
             background: rgba(0, 0, 0, 0.6);
         }
 
+        /* Mute/unmute button - 48px square hit target */
+        .audio-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 48px;
+            height: 48px;
+            padding: 0;
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.2s ease;
+        }
+
+        .audio-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .audio-toggle:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
         .speaker-icon {
             position: relative;
-            width: 36px;
-            height: 36px;
+            width: 30px;
+            height: 30px;
             color: rgba(255, 255, 255, 0.5);
             transition: color 0.3s ease;
         }
@@ -758,38 +750,94 @@
             opacity: 0;
         }
 
-        .volume-bars {
-            display: flex;
-            align-items: flex-end;
-            gap: 4px;
-            height: 30px;
+        /* Volume slider. The input is 44px tall so the whole strip is a valid
+           touch target; the visible track is drawn inside it. --fill is kept in
+           sync with the value by JS so the filled portion can be coloured. */
+        .volume-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 0 0 auto;
+            width: 140px;
+            height: 44px;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .volume-bar {
-            width: 6px;
-            background: rgba(255, 255, 255, 0.4);
+        .volume-slider:focus {
+            outline: none;
+        }
+
+        .volume-slider:focus-visible::-webkit-slider-thumb {
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.5);
+        }
+
+        .volume-slider::-webkit-slider-runnable-track {
+            height: 6px;
             border-radius: 3px;
-            transition: background 0.1s ease;
+            background: linear-gradient(
+                to right,
+                rgba(255, 255, 255, 0.6) 0 var(--fill),
+                rgba(255, 255, 255, 0.2) var(--fill) 100%
+            );
         }
 
-        .volume-bar:nth-child(1) { height: 6px; }
-        .volume-bar:nth-child(2) { height: 11px; }
-        .volume-bar:nth-child(3) { height: 16px; }
-        .volume-bar:nth-child(4) { height: 22px; }
-        .volume-bar:nth-child(5) { height: 28px; }
-
-        /* Muted state - active bars are brighter grey */
-        .volume-bar.active {
-            background: rgba(255, 255, 255, 0.7);
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            margin-top: -7px; /* centre the 20px thumb on the 6px track */
+            border: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+            transition: background 0.3s ease;
         }
 
-        /* Unmuted state - active bars are orange */
-        .audio-control.unmuted .volume-bar {
-            background: rgba(255, 255, 255, 0.3);
+        .volume-slider::-moz-range-track {
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
         }
 
-        .audio-control.unmuted .volume-bar.active {
-            background: #f97316;
+        .volume-slider::-moz-range-progress {
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+            transition: background 0.3s ease;
+        }
+
+        /* Unmuted state picks up the page's orange accent */
+        .audio-control.unmuted .volume-slider::-webkit-slider-runnable-track {
+            background: linear-gradient(
+                to right,
+                var(--accent) 0 var(--fill),
+                rgba(255, 255, 255, 0.2) var(--fill) 100%
+            );
+        }
+
+        .audio-control.unmuted .volume-slider::-webkit-slider-thumb {
+            background: #fff;
+        }
+
+        .audio-control.unmuted .volume-slider::-moz-range-progress {
+            background: var(--accent);
+        }
+
+        .audio-control.unmuted .volume-slider::-moz-range-thumb {
+            background: #fff;
         }
 
         @media (max-width: 768px) {
@@ -836,27 +884,18 @@
 
             .audio-control {
                 top: 45%;
-                padding: 12px 18px;
+                padding: 8px 16px 8px 8px;
             }
 
             .speaker-icon {
-                width: 28px;
-                height: 28px;
+                width: 26px;
+                height: 26px;
             }
 
-            .volume-bars {
-                height: 24px;
+            /* Touch targets stay at 44-48px on phones - do not shrink these. */
+            .volume-slider {
+                width: 120px;
             }
-
-            .volume-bar {
-                width: 5px;
-            }
-
-            .volume-bar:nth-child(1) { height: 5px; }
-            .volume-bar:nth-child(2) { height: 9px; }
-            .volume-bar:nth-child(3) { height: 13px; }
-            .volume-bar:nth-child(4) { height: 17px; }
-            .volume-bar:nth-child(5) { height: 21px; }
         }
 
         /* Earth zoom section */
@@ -1083,23 +1122,21 @@
         </div>
         <!-- Audio control -->
         <div class="audio-control" id="audioControl">
-            <div class="speaker-icon">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-                </svg>
-                <div class="speaker-mute-x" id="speakerMuteX">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
-                        <line x1="2" y1="2" x2="22" y2="22"/>
+            <button class="audio-toggle" id="audioToggle" type="button" aria-label="Unmute video" aria-pressed="false">
+                <span class="speaker-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
                     </svg>
-                </div>
-            </div>
-            <div class="volume-bars">
-                <div class="volume-bar"></div>
-                <div class="volume-bar"></div>
-                <div class="volume-bar"></div>
-                <div class="volume-bar"></div>
-                <div class="volume-bar"></div>
-            </div>
+                    <span class="speaker-mute-x" id="speakerMuteX">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+                            <line x1="2" y1="2" x2="22" y2="22"/>
+                        </svg>
+                    </span>
+                </span>
+            </button>
+            <input class="volume-slider" id="volumeSlider" type="range"
+                   min="0" max="1" step="0.01" value="0.5"
+                   aria-label="Volume">
         </div>
         <div class="video-scroll-indicator" id="videoScrollIndicator">
             <span class="video-scroll-text">Live data feed</span>
@@ -1613,7 +1650,8 @@
             const videoSection = document.getElementById('videoSection');
             const overlayContext = document.getElementById('overlayContext');
             const audioControl = document.getElementById('audioControl');
-            const volumeBars = audioControl ? audioControl.querySelectorAll('.volume-bar') : [];
+            const audioToggle = document.getElementById('audioToggle');
+            const volumeSlider = document.getElementById('volumeSlider');
 
             if (!video || !overlayContext || !audioControl) return;
 
@@ -1645,28 +1683,60 @@
             }
 
             let isMuted = true;
+            let volume = volumeSlider ? parseFloat(volumeSlider.value) : 0.5;
 
-            // Initialize audio visualizer
+            // Keep the slider's filled portion in sync with its value.
+            function paintSlider() {
+                audioControl.style.setProperty('--fill', (volume * 100) + '%');
+            }
+            paintSlider();
+
+            function setMutedState(muted) {
+                isMuted = muted;
+                audioControl.classList.toggle('unmuted', !muted);
+                if (audioToggle) {
+                    audioToggle.setAttribute('aria-pressed', String(!muted));
+                    audioToggle.setAttribute('aria-label', muted ? 'Unmute video' : 'Mute video');
+                }
+                if (audioVisualizer) audioVisualizer.setMuted(muted);
+            }
+
+            // Initialize audio
             function initAudioVisualizer() {
                 if (window.AudioVisualizer && !audioVisualizer) {
-                    audioVisualizer = new AudioVisualizer(video, volumeBars);
+                    audioVisualizer = new AudioVisualizer(video);
                     audioVisualizer.start();
+                    audioVisualizer.setVolume(volume);
                     audioVisualizer.setMuted(isMuted);
                 }
             }
 
-            // Audio control click handler
-            audioControl.addEventListener('click', () => {
-                isMuted = !isMuted;
-                if (!isMuted) {
-                    audioControl.classList.add('unmuted');
-                } else {
-                    audioControl.classList.remove('unmuted');
-                }
-                if (audioVisualizer) {
-                    audioVisualizer.setMuted(isMuted);
-                }
-            });
+            // Mute / unmute toggle
+            if (audioToggle) {
+                audioToggle.addEventListener('click', () => {
+                    initAudioVisualizer();
+                    setMutedState(!isMuted);
+                });
+            }
+
+            // Volume slider -> Web Audio gainNode (never video.volume, which
+            // iOS ignores). Moving the slider off zero also unmutes, so the
+            // control never looks live while producing no sound.
+            if (volumeSlider) {
+                volumeSlider.addEventListener('input', () => {
+                    volume = parseFloat(volumeSlider.value);
+                    paintSlider();
+                    initAudioVisualizer();
+                    if (audioVisualizer) audioVisualizer.setVolume(volume);
+                    if (isMuted && volume > 0) {
+                        setMutedState(false);
+                    } else if (!isMuted && volume === 0) {
+                        setMutedState(true);
+                    }
+                });
+                // Don't let slider interaction bubble up as a mute toggle.
+                volumeSlider.addEventListener('click', (e) => e.stopPropagation());
+            }
 
             // Triggered by Earth viewer when video is revealed
             window.addEventListener('earthVideoRevealed', () => {
@@ -1684,12 +1754,9 @@
                             startSequence();
                             initAudioVisualizer();
                         } else {
-                            // Left video section - mute audio but keep overlays visible
-                            isMuted = true;
-                            audioControl.classList.remove('unmuted');
-                            if (audioVisualizer) {
-                                audioVisualizer.setMuted(true);
-                            }
+                            // Left video section - mute audio but keep overlays visible.
+                            // The slider keeps its position, so unmuting restores the level.
+                            setMutedState(true);
                         }
                     });
                 }, { threshold: 0 });
