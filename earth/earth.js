@@ -18,7 +18,7 @@
  */
 const EARTH_TEXTURE_SETS = {
     hd: {
-        albedo: 'Albedo-4096.jpg',
+        albedo: 'Albedo-8192.jpg',
         bump:   'Bump-2048.jpg',
         clouds: 'Clouds-2048.jpg',
         ocean:  'Ocean-2048.jpg',
@@ -190,9 +190,13 @@ class EarthViewer {
             albedoMap.encoding = THREE.sRGBEncoding;
         }
 
-        // Set anisotropic filtering for quality
+        // Anisotropic filtering. The zoom-down views the surface at a very
+        // oblique angle, where isotropic mip selection blurs along the
+        // direction of greatest compression - this is usually the visible
+        // difference at the island keyframe, more than raw resolution.
         const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
         albedoMap.anisotropy = maxAniso;
+        bumpMap.anisotropy = maxAniso;
         lightsMap.anisotropy = maxAniso;
 
         this.createEarth(albedoMap, bumpMap, cloudsMap, oceanMap, lightsMap);
@@ -406,8 +410,10 @@ class EarthViewer {
         if (this.videoFixed) {
             if (progress > 0.77) {
                 this.videoFixed.classList.add('visible');
-                // Trigger video overlay sequence when video is clearly visible
-                if (progress > 0.97 && !this.videoOverlayTriggered) {
+                // Fire as soon as the video is revealed. This used to wait until
+                // 0.97, which left the audio control hidden for most of a
+                // viewport of scrolling after the video was already playing.
+                if (!this.videoOverlayTriggered) {
                     this.videoOverlayTriggered = true;
                     window.dispatchEvent(new CustomEvent('earthVideoRevealed'));
                 }
