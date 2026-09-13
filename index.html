@@ -852,7 +852,7 @@
 
         /* Earth zoom section */
         .earth-scroll-container {
-            height: 320vh; /* Scroll distance for zoom animation */
+            height: 270vh; /* Scroll distance for zoom animation */
             position: relative;
             background: transparent;
             z-index: 1; /* Stay above fixed video */
@@ -1478,7 +1478,7 @@
                     window.earthViewer.setZoomProgress(earthProgress);
 
                     // Disable pointer events after crossfade so video controls are clickable
-                    earthScrollContainer.style.pointerEvents = earthProgress > 0.82 ? 'none' : '';
+                    earthScrollContainer.style.pointerEvents = earthProgress > 0.97 ? 'none' : '';
 
                     // Parallax "weight" effect - Earth starts high, settles slowly (heavy feel)
                     const enterRatio = Math.max(0, Math.min(1, earthRect.top / viewportHeight));
@@ -1487,8 +1487,8 @@
                     const settleDown = Math.max(0, 1 - earthProgress * 3) * 160;
                     window.earthViewer.canvas.style.transform = `translateY(${weightOffset + settleDown}px)`;
 
-                    // Tilt down during phase 1 (0-0.65): 1.25 → 0.3
-                    const tiltProgress = Math.min(1, earthProgress / 0.65);
+                    // Tilt down during phase 1 (0-0.77): 1.25 → 0.3
+                    const tiltProgress = Math.min(1, earthProgress / 0.77);
                     window.earthViewer.lookAtY = 1.25 - tiltProgress * 0.95;
                 }
 

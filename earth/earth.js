@@ -309,7 +309,7 @@ class EarthViewer {
 
         if (!this.camera || !this.cameraEnd || !this.earthGroup) return;
 
-        const PHASE_SPLIT = 0.65; // Phase 1 ends, phase 2 (zoom-down) begins
+        const PHASE_SPLIT = 0.77; // Phase 1 ends, phase 2 (zoom-down) begins
 
         if (progress <= PHASE_SPLIT) {
             // Phase 1: Zoom from space to Hawaii centered
@@ -342,7 +342,7 @@ class EarthViewer {
 
         // Label visibility
         if (this.label) {
-            if (progress < 0.1) {
+            if (progress < 0.12) {
                 this.label.classList.add('visible');
             } else {
                 this.label.classList.remove('visible');
@@ -351,8 +351,8 @@ class EarthViewer {
 
         // Fade canvas for transition to video (only if textures loaded)
         if (this.texturesReady) {
-            if (progress > 0.7) {
-                const fadeProgress = Math.min(1, (progress - 0.7) / 0.12);
+            if (progress > 0.83) {
+                const fadeProgress = Math.min(1, (progress - 0.83) / 0.14);
                 this.canvas.style.opacity = 1 - fadeProgress;
             } else {
                 this.canvas.style.opacity = 1;
@@ -361,10 +361,10 @@ class EarthViewer {
 
         // Show video behind Earth as it fades
         if (this.videoFixed) {
-            if (progress > 0.65) {
+            if (progress > 0.77) {
                 this.videoFixed.classList.add('visible');
                 // Trigger video overlay sequence when video is clearly visible
-                if (progress > 0.82 && !this.videoOverlayTriggered) {
+                if (progress > 0.97 && !this.videoOverlayTriggered) {
                     this.videoOverlayTriggered = true;
                     window.dispatchEvent(new CustomEvent('earthVideoRevealed'));
                 }
