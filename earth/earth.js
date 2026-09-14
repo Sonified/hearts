@@ -412,68 +412,78 @@ class EarthViewer {
         this.cameraFinal = new THREE.Vector3(0.11, 0.32, 0.9);
     }
 
+    /**
+     * Scrub the whole scene from a single 0..1 scroll position.
+     *
+     * The scene owns exactly two viewports of scroll, so every part of that
+     * budget has to show movement. One clock (`e`) drives the entire camera
+     * path and the Earth's rotation; the path is piecewise between three
+     * waypoints, so the reader never sees the motion stop and restart.
+     */
     setZoomProgress(progress) {
-        this.zoomProgress = Math.max(0, Math.min(1, progress));
+        progress = Math.max(0, Math.min(1, progress));
+        this.zoomProgress = progress;
 
         if (!this.camera || !this.cameraEnd || !this.earthGroup) return;
 
-        const PHASE_SPLIT = 0.77; // Phase 1 ends, phase 2 (zoom-down) begins
+        // Where along the camera path the mid waypoint (Hawaii centred) sits.
+        const PATH_SPLIT = 0.72;
+        const e = this.easeZoom(progress);
 
-        if (progress <= PHASE_SPLIT) {
-            // Phase 1: Zoom from space to Hawaii centered
-            const phase1Progress = progress / PHASE_SPLIT;
-            const eased = this.easeInOutCubic(phase1Progress);
+        if (e <= PATH_SPLIT) {
+            // Leg 1: out of space, down onto Hawaii.
+            const q = e / PATH_SPLIT;
+            this.camera.position.lerpVectors(this.cameraStart, this.cameraEnd, q);
 
-            this.camera.position.lerpVectors(this.cameraStart, this.cameraEnd, eased);
-
-            // Interpolate Earth rotation from US to Hawaii
+            // Interpolate Earth rotation from US to Hawaii on the same clock.
             const startRot = this.config.initialRotationY;
             const endRot = this.config.endRotationY;
-            this.earthGroup.rotation.y = startRot + (endRot - startRot) * eased;
+            this.earthGroup.rotation.y = startRot + (endRot - startRot) * q;
 
             // Look at Earth center with tilt offset (levels out as we zoom in)
-            const lookY = this.lookAtY * (1 - eased);
-            this.camera.lookAt(new THREE.Vector3(0, lookY, 0));
+            this.camera.lookAt(new THREE.Vector3(0, this.lookAtY * (1 - q), 0));
         } else {
-            // Phase 2: Zoom straight down toward surface
-            const phase2Progress = (progress - PHASE_SPLIT) / (1 - PHASE_SPLIT);
-            const eased = 1 - Math.pow(1 - phase2Progress, 2); // ease-out (decelerating)
-
-            this.camera.position.lerpVectors(this.cameraEnd, this.cameraFinal, eased);
-
-            // Keep rotation at end position
+            // Leg 2: straight down toward the surface.
+            const q = (e - PATH_SPLIT) / (1 - PATH_SPLIT);
+            this.camera.position.lerpVectors(this.cameraEnd, this.cameraFinal, q);
             this.earthGroup.rotation.y = this.config.endRotationY;
-
-            // Look straight at Earth center
             this.camera.lookAt(new THREE.Vector3(0, 0, 0));
         }
 
         // Label visibility
         if (this.label) {
-            if (progress < 0.12) {
+            if (progress < 0.10) {
                 this.label.classList.add('visible');
             } else {
                 this.label.classList.remove('visible');
             }
         }
 
-        // Fade canvas for transition to video (only if textures loaded)
+        // Crossfade to the video. The window is sized so the fade FINISHES just
+        // before progress 1, which is the pixel the video beat's snap point sits
+        // on - the reader arrives at the beat with the handover already done
+        // rather than completing it during the next gesture.
+        //
+        // setZoomProgress is the sole owner of this canvas's opacity. Nothing
+        // else may write it: a direct opacity = '1' anywhere else is what pinned
+        // a washed-out fully-zoomed Earth over the video on a mid-page reload.
         if (this.texturesReady) {
-            if (progress > 0.83) {
-                const fadeProgress = Math.min(1, (progress - 0.83) / 0.14);
-                this.canvas.style.opacity = 1 - fadeProgress;
+            const FADE_FROM = 0.80;
+            const FADE_TO = 0.97;
+            if (progress > FADE_FROM) {
+                const f = Math.min(1, (progress - FADE_FROM) / (FADE_TO - FADE_FROM));
+                this.canvas.style.opacity = 1 - f;
             } else {
                 this.canvas.style.opacity = 1;
             }
         }
 
-        // Show video behind Earth as it fades
+        // Show video behind Earth as it fades.
+        const reveal = (typeof window.HEARTS_VIDEO_REVEAL === 'number')
+            ? window.HEARTS_VIDEO_REVEAL : 0.70;
         if (this.videoFixed) {
-            if (progress > 0.77) {
+            if (progress > reveal) {
                 this.videoFixed.classList.add('visible');
-                // Fire as soon as the video is revealed. This used to wait until
-                // 0.97, which left the audio control hidden for most of a
-                // viewport of scrolling after the video was already playing.
                 if (!this.videoOverlayTriggered) {
                     this.videoOverlayTriggered = true;
                     window.dispatchEvent(new CustomEvent('earthVideoRevealed'));
@@ -485,19 +495,20 @@ class EarthViewer {
         }
     }
 
-    easeInOutCubic(t) {
-        // Phase 1 (0-0.33): Earth entering frame - barely any movement (heavy/gravitational)
-        // Phase 2 (0.33-1.0): Zoom in with ease-in-out
-        if (t < 0.33) {
-            // Entering phase: only 5% of animation happens here (very slow drift)
-            const p = t / 0.33;
-            return 0.05 * (p * p);
-        } else {
-            // Zoom phase: remaining 95% with smooth ease-in-out
-            const p = (t - 0.33) / 0.67;
-            const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-            return 0.05 + 0.95 * eased;
-        }
+    /**
+     * Zoom easing.
+     *
+     * The old curve spent its first third moving 5% of the way - across this
+     * scene's budget that is two thirds of a viewport of scrolling for almost
+     * no visible change, which is dead scroll by any honest measure. This is a
+     * blend of linear and smoothstep: eased at both ends so the entry and the
+     * arrival still feel weighted, but its slope never drops below 0.45 of the
+     * average, so the planet is always visibly moving under the reader's
+     * finger. Monotonic, so scrolling back up retraces it exactly.
+     */
+    easeZoom(t) {
+        const s = t * t * (3 - 2 * t);
+        return 0.45 * t + 0.55 * s;
     }
 
     setupVisibilityObserver() {
@@ -511,7 +522,10 @@ class EarthViewer {
                     this.animationId = null;
                 }
             });
-        }, { threshold: 0.1 });
+        }, { threshold: 0 });
+        // threshold 0, not 0.1: the container is three viewports tall, so 0.1
+        // meant "30vh of it is on screen" - a third of the descent would have
+        // played against a frozen last-rendered frame before the loop woke up.
 
         observer.observe(this.container);
     }

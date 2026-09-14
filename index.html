@@ -1,5 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- snap-off is the safe starting state: a mid-page reload restores the scroll
+     offset AFTER the inline scripts run, so arming mandatory snapping before we
+     know where we are invites the browser to yank the reader somewhere. The
+     scroll handler arms it on its first run. -->
+<html lang="en" class="snap-off">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,22 +26,55 @@
             box-sizing: border-box;
         }
 
-        /* Section snapping, sonara-style, but PROXIMITY not mandatory: proximity
-           only pulls when a snap point is already close, so it can never force a
-           rest position in the middle of a scroll-driven scene.
+        /* =====================================================================
+           SCROLL ARCHITECTURE
+           =====================================================================
+           A snap deck with exactly ONE scroll-driven exception.
 
-           Snap points are placed on the discrete sections only (see
-           scroll-snap-align below). The satellite pan and the Earth zoom carry
-           NO snap alignment, so they are never snap targets, and snapping is
-           switched off entirely while either of those scenes is on screen so the
-           continuous satellite-down-to-planet scroll is never interrupted. */
+           The document is a stack of viewport-tall beats. Every beat is a
+           MANDATORY snap point, so one gesture moves you exactly one beat.
+           Proximity snapping is deliberately NOT used anywhere: proximity pulls
+           slow scrolls backward while letting fast ones through, which is the
+           single worst thing a scroll can do to a reader. Snap either commits
+           or it is off.
+
+           Document map (vh from the top):
+
+              0   .hero                        snap
+            100   .content                     snap
+            200   .satellite-scroll-container  snap  BEAT 1 - satellite in frame
+            300     .ace-beat-2 (its 2nd half) snap  BEAT 2 - data alongside
+            400   .earth-scroll-container      ---   (pinned; zoom 400 -> 600)
+            600   .video-section            snap   (margin-top:-100vh; starts
+                                                    exactly where the Earth
+                                                    sticky unpins)
+            700   .image-text-section       snap
+            800   .numbers-section          snap
+            900   end of document
+
+           The ONE exception is the continuous run from BEAT 2 (300vh) to the
+           video beat (600vh): the descent off the satellite down to the planet,
+           the Earth zoom, and the crossfade into the volcano video. Snapping is
+           SUSPENDED across that whole range (html.snap-off, driven from the
+           scroll handler) so the browser never fights the scene.
+
+           Both boundaries are deliberate, not emergent:
+           - ENTRY  300vh is a real snap point, so the deck commits to BEAT 2
+                    first and only then hands off. Snapping drops the instant
+                    the reader moves past it (and pre-emptively on a downward
+                    wheel/touch at the boundary, so no snap is ever started).
+           - EXIT   600vh is both the end of the Earth scene's pinned range AND
+                    the video beat's snap point - the same pixel. Snapping
+                    re-engages exactly where the scene ends, so there is nothing
+                    to lurch to. In reverse, coming back up re-arms the deck at
+                    BEAT 2, which is likewise the pixel the scene starts at. */
         html {
             /* The root element had no background, so any moment where a layer
                had not painted yet - notably a mid-page reload before the video
                or Earth canvas draws - showed the browser's white default as a
                bare white screen. Paint the site's own black instead. */
             background: #000;
-            scroll-snap-type: y proximity;
+            scroll-snap-type: y mandatory;
             /* The document has no trailing space - scrollHeight matches the last
                section's bottom edge exactly. What used to appear past the end was
                rubber-band overscroll exposing the fixed video/starfield layers
@@ -46,16 +83,24 @@
             overscroll-behavior-y: none;
         }
 
+        /* Present in the markup so a mid-page reload never lands with mandatory
+           snapping armed before the scroll handler has decided where we are.
+           The handler removes it on its first run if we are outside the scene. */
         html.snap-off {
             scroll-snap-type: none;
         }
 
         .hero,
         .content,
+        .satellite-scroll-container,
+        .ace-beat-2,
         .video-section,
         .image-text-section,
         .numbers-section {
             scroll-snap-align: start;
+            /* One gesture = one beat. Without this a fling skates over several
+               sections, which is what makes a deck feel loose. */
+            scroll-snap-stop: always;
         }
 
         body {
@@ -213,8 +258,13 @@
             filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.5));
         }
 
+        /* Exactly one viewport: a deck beat is a beat, never 1.3 of one. The
+           inner block is centred and clipped so a long line can never quietly
+           push the section past a viewport and desynchronise every snap point
+           below it. */
         .content {
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
             background: #1a1a2e;
             padding: 100px 20px;
             display: flex;
@@ -324,7 +374,8 @@
         }
 
         .image-text-section {
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
             background: #2a2a4e;
             padding: 100px 20px;
             display: flex;
@@ -345,6 +396,9 @@
         .image-text-container img {
             width: 100%;
             height: auto;
+            /* Keeps the photo from dictating a height taller than the beat. */
+            max-height: 68vh;
+            object-fit: cover;
             border-radius: 10px;
             position: relative;
             z-index: 1;
@@ -359,7 +413,8 @@
         }
 
         .numbers-section {
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
             background: #0f0f1e;
             padding: 100px 20px;
             display: flex;
@@ -414,11 +469,22 @@
             text-align: left;
         }
 
-        /* Scroll-driven satellite to plot transition */
+        /* ACE region - TWO snap beats sharing one pinned stage.
+           BEAT 1 (container top, 200vh): the satellite is in frame, alone.
+           BEAT 2 (.ace-beat-2 top, 300vh): the solar wind panel has arrived
+           alongside it.
+           The single viewport of scroll between them scrubs the transition, so
+           it plays under the reader's finger and retraces exactly on the way
+           back. It is never a resting place, so it is not dead scroll - it is
+           the move between two beats.
+           Background is transparent so the fixed starfield reads continuously
+           from here all the way down through the Earth descent; an opaque black
+           section would have cut a hard seam across the screen the moment the
+           stage started sliding out. */
         .satellite-scroll-container {
-            height: 200vh; /* Scroll distance for the animation */
+            height: 200vh;
             position: relative;
-            background: #000000;
+            background: transparent;
         }
 
         .satellite-sticky {
@@ -427,6 +493,15 @@
             height: 100vh;
             overflow: hidden;
             display: flex;
+        }
+
+        /* Pure snap rail: gives BEAT 2 a real snap point one viewport below
+           BEAT 1 without adding anything to look at. It occupies the second
+           half of the container, which is exactly the flow space the sticky
+           stage is pinned over. */
+        .ace-beat-2 {
+            height: 100vh;
+            pointer-events: none;
         }
 
         .starfield-bg {
@@ -623,6 +698,11 @@
                 line-height: 1.35;
             }
 
+            /* BEAT 2 on a phone: the panel RISES into place under the
+               satellite rather than only fading up. --ace is the beat1 -> beat2
+               scroll progress, written by the scroll handler; using it here
+               instead of the inline translateX keeps the stacked layout while
+               still giving the data an arrival you can see. */
             .plot-panel {
                 top: 50%;
                 right: auto;
@@ -631,7 +711,7 @@
                 height: 50%;
                 padding: 12px 16px;
                 justify-content: flex-start;
-                transform: none !important;
+                transform: translateY(calc((1 - var(--ace, 0)) * 44px)) !important;
             }
 
             .plot-container {
@@ -655,12 +735,25 @@
             }
         }
 
+        /* The volcano beat. It is a transparent window onto the fixed video
+           layer, and its snap point is pulled UP by exactly one viewport with
+           the negative margin so that it starts on the same pixel where the
+           Earth sticky unpins (900vh document instead of 1000vh).
+
+           That negative margin is the whole exit-boundary design: without it
+           the Earth stage spent a full viewport sliding out over a video that
+           had already finished crossfading in, and then the video beat showed
+           the same unchanged frame for a second viewport - about 1.5 viewports
+           of nothing, which is exactly what this page was accused of. Now the
+           scene ends and the beat begins on the same pixel, so snapping
+           re-engages with nowhere to jump to. */
         .video-section {
             width: 100%;
             background: transparent;
             position: relative;
             z-index: 1;
             height: 100vh;
+            margin-top: -100vh;
             /* Empty spacer that sits above the fixed video layer. Without this
                it would swallow every click aimed at the audio control below it. */
             pointer-events: none;
@@ -994,24 +1087,57 @@
                 font-size: 1.1rem;
             }
 
+            /* Every beat is exactly one viewport now, so on a phone the two
+               text-heavy beats have to actually FIT one. Measured at 390x844
+               they overflowed their section by 52px and 40px respectively,
+               which with overflow:hidden would have silently cropped the last
+               line of copy and the last statistic. These are sized to clear
+               that with room to spare rather than to the pixel. */
+            .content {
+                padding: 56px 22px;
+            }
+
+            .image-text-section {
+                padding: 48px 20px;
+            }
+
             .image-text-container {
                 grid-template-columns: 1fr;
-                gap: 40px;
+                gap: 24px;
+            }
+
+            .image-text-container .text-content h3 {
+                font-size: 1.15rem;
+                line-height: 1.45;
+            }
+
+            .image-text-container img {
+                max-height: 40vh;
+            }
+
+            .numbers-section {
+                padding: 48px 20px;
+            }
+
+            .numbers-container h2 {
+                font-size: 1.9rem;
+                margin-bottom: 32px;
             }
 
             .stat-item {
                 grid-template-columns: 1fr;
-                gap: 20px;
+                gap: 8px;
+                margin-bottom: 30px;
                 text-align: center;
             }
 
             .stat-number {
                 text-align: center;
-                font-size: 3.5rem;
+                font-size: 2.6rem;
             }
 
             .stat-description {
-                font-size: 1.2rem;
+                font-size: 1.05rem;
             }
 
             .overlay-context {
@@ -1033,15 +1159,10 @@
                 bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
             }
 
-            /* Trim the dead scroll after the volcano video. This section is a
-               pure spacer - a full extra viewport of nothing but the fixed
-               video, on top of the ~1.2 viewports of earth-scroll-container
-               tail that already play after the zoom completes. That tail is
-               load-bearing (it keeps .earth-sticky pinned through the tuned
-               zoom) so it is left alone; this cushion is not. */
-            .video-section {
-                height: 20vh;
-            }
+            /* The video beat is a full viewport on every format now. The 20vh
+               stub that used to live here was a patch for dead scroll that no
+               longer exists: the Earth scene's slide-out tail and the video
+               beat are the same viewport, so there is nothing left to trim. */
 
             .speaker-icon {
                 width: 26px;
@@ -1054,9 +1175,14 @@
             }
         }
 
-        /* Earth zoom section */
+        /* Earth zoom - the one continuous, scroll-scrubbed scene.
+           300vh = 100vh of sticky stage + 200vh of pinned scroll, so the zoom
+           gets a hard budget of exactly two viewports. The container's first
+           viewport (400vh is its top edge, and it starts entering at 300vh) is
+           the descent off the satellite: the stage above slides out while the
+           planet rises from below. */
         .earth-scroll-container {
-            height: 270vh; /* Scroll distance for zoom animation */
+            height: 300vh;
             position: relative;
             background: transparent;
             z-index: 1; /* Stay above fixed video */
@@ -1233,6 +1359,10 @@
                 </div>
             </div>
         </div>
+        <!-- BEAT 2's snap rail. See .ace-beat-2 in the stylesheet: it gives the
+             "data arrives alongside the satellite" moment its own snap point,
+             one viewport below the "satellite in frame" moment. -->
+        <div class="ace-beat-2" id="aceBeat2"></div>
     </div>
 
     <!-- Earth zoom section - transitions from space to Kilauea -->
@@ -1629,6 +1759,16 @@
             const earthScrollContainer = document.getElementById('earthScrollContainer');
             const videoSectionEl = document.getElementById('videoSection');
 
+            // Zoom progress at which the volcano video is switched on behind the
+            // Earth and the crossfade begins. Shared with earth.js so the reveal,
+            // the pointer-events hand-off and the audio control all key off one
+            // number instead of three copies of 0.77 drifting apart.
+            const VIDEO_REVEAL = 0.70;
+            const EARTH_PHASE_SPLIT = 0.72;
+            window.HEARTS_VIDEO_REVEAL = VIDEO_REVEAL;
+
+            const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
             // Shared state for satellite tilt (updated by scroll, read by animation loop)
             window.satelliteScrollTilt = 0;
 
@@ -1643,16 +1783,24 @@
                     scrollIndicator.classList.remove('hidden');
                 }
 
-                // 2. Satellite section animations (only if elements exist)
+                // 2. ACE region: scrub BEAT 1 -> BEAT 2.
+                //
+                // The container is 200vh over a 100vh stage, so this progress is
+                // 0 on BEAT 1's snap point and exactly 1 on BEAT 2's. The single
+                // viewport between them is never a resting place, so scrubbing
+                // it means the transition plays under the reader's gesture and
+                // retraces precisely on the way back up.
                 if (satelliteScrollContainer && satellitePanel && plotPanel) {
                     const rect = satelliteScrollContainer.getBoundingClientRect();
                     const containerTop = rect.top;
                     const containerHeight = rect.height;
 
-                    // Scroll progress for satellite/plot animation
-                    const scrollDistance = containerHeight - viewportHeight;
-                    const scrolled = -containerTop;
-                    const progress = Math.max(0, Math.min(1, scrolled / scrollDistance));
+                    const scrollDistance = Math.max(1, containerHeight - viewportHeight);
+                    const progress = clamp01(-containerTop / scrollDistance);
+                    // Read by the phone layout, which stacks the panels and so
+                    // cannot use the desktop translateX. See .plot-panel in the
+                    // max-width:820px block.
+                    satelliteScrollContainer.style.setProperty('--ace', String(progress));
 
                     // Satellite panel transform
                     const satelliteX = -progress * 25;
@@ -1688,93 +1836,152 @@
                     }
                 }
 
-                // 3. Earth section zoom animation (starts as soon as section enters viewport)
-                if (earthScrollContainer && window.earthViewer) {
+                // 3. Earth zoom - the continuous scene.
+                //
+                // Progress is derived from the container's own geometry rather
+                // than from a hand-tuned lead-in, so it is 0 on the exact pixel
+                // the sticky stage pins and 1 on the exact pixel it unpins:
+                //
+                //     scroll distance = container height - one viewport
+                //                     = 300vh - 100vh = 200vh
+                //
+                // That is the whole budget for the zoom, and the video beat's
+                // snap point is placed on the pixel where it hits 1. Nothing is
+                // left over at either end to scroll through dead.
+                if (earthScrollContainer) {
                     const earthRect = earthScrollContainer.getBoundingClientRect();
-                    const earthScrolled = viewportHeight - earthRect.top + viewportHeight * 0.2;
-                    const earthProgress = Math.max(0, Math.min(1, earthScrolled / earthRect.height));
+                    const zoomDistance = Math.max(1, earthRect.height - viewportHeight);
+                    const earthProgress = clamp01(-earthRect.top / zoomDistance);
 
-                    window.earthViewer.setZoomProgress(earthProgress);
+                    // Stop the Earth layer swallowing clicks once the video is
+                    // revealed, so the video itself is tappable.
+                    earthScrollContainer.style.pointerEvents =
+                        earthProgress > VIDEO_REVEAL ? 'none' : '';
 
-                    // Stop the Earth layer swallowing clicks as soon as the video
-                    // is revealed (same 0.77 threshold), so the video itself is
-                    // tappable. Aligned with the reveal instead of 0.97.
-                    earthScrollContainer.style.pointerEvents = earthProgress > 0.77 ? 'none' : '';
+                    const viewer = window.earthViewer;
+                    if (viewer) {
+                        viewer.setZoomProgress(earthProgress);
 
-                    // Parallax "weight" effect - Earth enters high and settles.
-                    //
-                    // Both terms are driven by the SAME clock (section entry).
-                    // They used to run on different clocks - the lift on section
-                    // entry, the settle nudge on zoom progress - and progress
-                    // starts rising while enterRatio is still clamped at 1, so
-                    // the Earth lurched upward (-440 -> -476) before settling.
-                    // That backward jolt is the "jump" on entry. Combined, the
-                    // offset is strictly monotonic from -440 to 0.
-                    const enterRatio = Math.max(0, Math.min(1, earthRect.top / viewportHeight));
-                    const enterOffset = enterRatio * -440; // -600 lift + 160 settle, merged
-                    window.earthViewer.canvas.style.transform = `translateY(${enterOffset}px)`;
+                        // The descent, and the only motion the Earth layer
+                        // makes that is not the zoom itself.
+                        //
+                        // enterRatio runs 1 -> 0 across the viewport of scroll
+                        // BEFORE the stage pins. That viewport is the hand-off
+                        // out of BEAT 2: the satellite stage slides up and out
+                        // of frame while the planet climbs in from below. A
+                        // POSITIVE offset makes the planet lag the scroll
+                        // slightly, so it reads as something heavy being caught
+                        // up with - and, just as importantly, it guarantees the
+                        // globe stays fully below the fold while BEAT 2 is the
+                        // resting frame, so no sliver of Earth can bleed into
+                        // the ACE composition. Strictly monotonic 120 -> 0,
+                        // with no reversal anywhere (the old pair of offsets
+                        // ran on two different clocks and jolted on entry).
+                        const enterRatio = clamp01(earthRect.top / viewportHeight);
+                        if (viewer.canvas) {
+                            viewer.canvas.style.transform =
+                                `translateY(${enterRatio * 120}px)`;
+                        }
 
-                    // Tilt down during phase 1 (0-0.77): 1.25 → 0.3
-                    const tiltProgress = Math.min(1, earthProgress / 0.77);
-                    window.earthViewer.lookAtY = 1.25 - tiltProgress * 0.95;
-                }
-
-                // 4. Audio control visibility mirrors the video being the active
-                // content. Derived from scroll state every frame rather than
-                // toggled by events, so it is symmetric in both directions.
-                // (The control is a top-level fixed element now, so unlike when
-                // it lived inside .video-fixed it no longer inherits any
-                // hide/fade from a parent - this is what hides it.)
-                if (earthScrollContainer && window.setVideoOverlayActive) {
-                    const eRect = earthScrollContainer.getBoundingClientRect();
-                    const eProgress = Math.max(0, Math.min(1,
-                        (viewportHeight - eRect.top + viewportHeight * 0.2) / eRect.height));
-                    const revealed = eProgress > 0.77;
-                    // The control is pinned to the video, which is a fixed layer
-                    // that later sections scroll over. Hide it once the next
-                    // section reaches it, rather than waiting for the video
-                    // spacer to leave - on phones that spacer is short, so the
-                    // control would otherwise sit buried under later content.
-                    const nextSection = videoSectionEl ? videoSectionEl.nextElementSibling : null;
-                    let covered = false;
-                    if (nextSection) {
-                        const nextTop = nextSection.getBoundingClientRect().top;
-
-                        // The control sits still over the video, so hide it just
-                        // before the following section reaches it rather than
-                        // letting it be buried. It occupies roughly the bottom
-                        // 200px; this triggers a little above that.
-                        covered = nextTop <= viewportHeight - 160;
-                    } else if (videoSectionEl) {
-                        covered = videoSectionEl.getBoundingClientRect().bottom <= 0;
+                        // Camera tilt levels out across leg 1 of the zoom.
+                        const tilt = Math.min(1, earthProgress / EARTH_PHASE_SPLIT);
+                        viewer.lookAtY = 1.25 - tilt * 0.95;
                     }
-                    window.setVideoOverlayActive(revealed && !covered);
+
+                    // 4. Audio control visibility mirrors "the video is the
+                    // content on screen". Derived from scroll position every
+                    // frame rather than toggled by events, so it is exactly
+                    // symmetric in both directions. Deliberately OUTSIDE the
+                    // viewer guard: if WebGL is unavailable and the Earth never
+                    // initialises, the video and its control must still behave.
+                    if (window.setVideoOverlayActive && videoSectionEl) {
+                        const revealed = earthProgress > VIDEO_REVEAL;
+                        // The video beat is one viewport tall and its snap point
+                        // is its top edge, so its midpoint is the natural commit
+                        // line: at rest on the video beat the control is up, at
+                        // rest on the next beat it is gone, and the hand-over
+                        // happens once, mid-gesture, in both directions.
+                        const leaving =
+                            videoSectionEl.getBoundingClientRect().top < -viewportHeight * 0.5;
+                        window.setVideoOverlayActive(revealed && !leaving);
+                    }
                 }
 
-                // 5. Suspend snapping while either scroll-driven scene is on
-                // screen. Those containers carry no scroll-snap-align so they are
-                // never snap targets, but without this the video section's snap
-                // point becomes "proximate" during the tail of the Earth zoom and
-                // could yank the reader forward mid-zoom.
-                if (satelliteScrollContainer || earthScrollContainer) {
-                    const overlaps = (el) => {
-                        if (!el) return false;
-                        const r = el.getBoundingClientRect();
-                        return r.bottom > 0 && r.top < viewportHeight;
-                    };
-                    const inScene = overlaps(satelliteScrollContainer) || overlaps(earthScrollContainer);
-                    document.documentElement.classList.toggle('snap-off', inScene);
-                }
+                // 5. Snapping: armed everywhere except inside the continuous
+                // scene. See the SCROLL ARCHITECTURE note at the top of the
+                // stylesheet for the boundaries this implements.
+                applySnapState(scrollY, 0);
 
                 lastScrollY = scrollY;
                 scrollRAF = null;
             }
 
+            // --- Snap arming -------------------------------------------------
+            //
+            // The continuous scene runs from BEAT 2 to the video beat. Those
+            // two offsets are measured from the live DOM (and re-measured on
+            // resize) rather than assumed, so the model cannot drift out of
+            // sync with the stylesheet.
+            let sceneStart = 0; // BEAT 2's snap point
+            let sceneEnd = 0;   // the video beat's snap point
+
+            function measureScene() {
+                if (!earthScrollContainer) return;
+                const docTop = window.scrollY;
+                const earthTop = earthScrollContainer.getBoundingClientRect().top + docTop;
+                // The scene begins one viewport before the stage pins: that
+                // viewport is the descent, and its start is BEAT 2.
+                sceneStart = earthTop - window.innerHeight;
+                // ...and ends where the stage unpins, which is the video beat.
+                sceneEnd = earthTop + (earthScrollContainer.offsetHeight - window.innerHeight);
+            }
+
+            // hintDelta lets an input event arm the right state BEFORE the
+            // browser has a chance to start a snap it would then have to fight:
+            // a downward flick while resting exactly on BEAT 2 suspends
+            // snapping in the same task, and an upward flick while resting on
+            // the video beat does the same.
+            function applySnapState(scrollY, hintDelta) {
+                if (!earthScrollContainer) return;
+                let inScene = scrollY > sceneStart + 1 && scrollY < sceneEnd - 1;
+                if (!inScene && hintDelta) {
+                    if (hintDelta > 0 && Math.abs(scrollY - sceneStart) <= 2) inScene = true;
+                    if (hintDelta < 0 && Math.abs(scrollY - sceneEnd) <= 2) inScene = true;
+                }
+                document.documentElement.classList.toggle('snap-off', inScene);
+            }
+
             window.addEventListener('scroll', () => {
+                // Arm/disarm synchronously - a class toggle is cheap and the
+                // whole point is to beat the browser's snap decision to it.
+                applySnapState(window.scrollY, 0);
                 if (!scrollRAF) {
                     scrollRAF = requestAnimationFrame(handleScroll);
                 }
             }, { passive: true });
+
+            window.addEventListener('wheel', (e) => {
+                applySnapState(window.scrollY, e.deltaY);
+            }, { passive: true });
+
+            let touchY = null;
+            window.addEventListener('touchstart', (e) => {
+                touchY = e.touches[0] ? e.touches[0].clientY : null;
+            }, { passive: true });
+            window.addEventListener('touchmove', (e) => {
+                if (touchY === null || !e.touches[0]) return;
+                const y = e.touches[0].clientY;
+                // Finger moving up = scrolling down.
+                applySnapState(window.scrollY, touchY - y);
+                touchY = y;
+            }, { passive: true });
+
+            window.addEventListener('resize', () => {
+                measureScene();
+                applySnapState(window.scrollY, 0);
+                handleScroll();
+            });
+            measureScene();
 
             // Exposed so the lazily-created EarthViewer can sync to the current
             // scroll position the moment it initializes.
@@ -1790,10 +1997,17 @@
             // top-of-page state. Re-run as soon as the real position is known,
             // and once more on the next frame, so the first thing painted is
             // correct rather than waiting for the reader to scroll.
-            document.addEventListener('DOMContentLoaded', handleScroll);
-            window.addEventListener('load', () => {
+            document.addEventListener('DOMContentLoaded', () => {
+                measureScene();
                 handleScroll();
-                requestAnimationFrame(handleScroll);
+            });
+            window.addEventListener('load', () => {
+                measureScene();
+                handleScroll();
+                requestAnimationFrame(() => {
+                    measureScene();
+                    handleScroll();
+                });
             });
         })();
 
