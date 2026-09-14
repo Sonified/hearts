@@ -32,6 +32,11 @@
            switched off entirely while either of those scenes is on screen so the
            continuous satellite-down-to-planet scroll is never interrupted. */
         html {
+            /* The root element had no background, so any moment where a layer
+               had not painted yet - notably a mid-page reload before the video
+               or Earth canvas draws - showed the browser's white default as a
+               bare white screen. Paint the site's own black instead. */
+            background: #000;
             scroll-snap-type: y proximity;
             /* The document has no trailing space - scrollHeight matches the last
                section's bottom edge exactly. What used to appear past the end was
@@ -472,7 +477,17 @@
 
         .satellite-label {
             position: absolute;
-            bottom: 60px;
+            /* Anchored just under the satellite, not to the panel's bottom edge.
+               The model is rendered centred in the panel and its on-screen size
+               is a fixed fraction of the canvas height, so a percentage keeps
+               the caption tucked under it at every viewport. Pinning it to the
+               panel's bottom edge instead left a gap that GREW as the scroll
+               handler scaled the panel down, because the model shrank toward
+               the centre while the caption stayed put. As a percentage both
+               scale together, so the gap stays constant. 74% clears the
+               antenna at full scale. */
+            top: 74%;
+            bottom: auto;
             left: 50%;
             transform: translateX(-50%);
             text-align: center;
@@ -591,7 +606,8 @@
             }
 
             .satellite-label {
-                bottom: 16px;
+                top: 74%;
+                bottom: auto;
                 width: 100%;
                 padding: 0 16px;
                 transform: translateX(-50%) !important;
@@ -1766,6 +1782,19 @@
 
             // Initial call
             handleScroll();
+
+            // A mid-page reload restores the scroll position AFTER this script
+            // runs, so the call above computed every scroll-dependent value for
+            // scrollY 0 while the page was actually somewhere else - the Earth
+            // fade, the video layer and the audio control were all left in their
+            // top-of-page state. Re-run as soon as the real position is known,
+            // and once more on the next frame, so the first thing painted is
+            // correct rather than waiting for the reader to scroll.
+            document.addEventListener('DOMContentLoaded', handleScroll);
+            window.addEventListener('load', () => {
+                handleScroll();
+                requestAnimationFrame(handleScroll);
+            });
         })();
 
         // Counter animation with easing

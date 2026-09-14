@@ -218,12 +218,18 @@ class EarthViewer {
             }
             this.setZoomProgress(this.zoomProgress);
 
-            // Render offscreen (opacity still 0), then reveal on the next frame
-            // so the compositor never shows a half-built or mispositioned Earth.
+            // Render offscreen, then reveal on the next frame so the compositor
+            // never shows a half-built or mispositioned Earth.
+            //
+            // setZoomProgress owns the canvas opacity - it fades the Earth out
+            // past 0.83 to hand over to the video. Do NOT force opacity to 1
+            // here: on a mid-page reload at, say, progress 0.95 that pinned the
+            // fully-zoomed Earth opaque over the video, which is the washed-out
+            // white screen on refresh.
             this.renderer.render(this.scene, this.camera);
             requestAnimationFrame(() => {
+                this.setZoomProgress(this.zoomProgress);
                 this.renderer.render(this.scene, this.camera);
-                this.canvas.style.opacity = '1';
             });
         };
 
