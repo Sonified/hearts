@@ -15,35 +15,36 @@
       device-appropriate tier (hd/ vs mobile/) is chosen at runtime - preloading
       here would pull down the wrong set and hold it in memory from first paint.
     -->
-    <script>
-        // Reloading used to strand the reader mid-animation, part-way through a
-        // scroll-driven scene. Disable the browser's own restore and remember the
-        // position ourselves, so the load handler can snap to the NEAREST scene
-        // boundary instead (see snapToNearestScene). Must run before first paint.
-        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-        try {
-            var __heartsSaved = sessionStorage.getItem('hearts_scroll');
-            window.__heartsSavedScroll = __heartsSaved === null ? null : parseFloat(__heartsSaved);
-        } catch (e) {
-            window.__heartsSavedScroll = null;
-        }
-        (function () {
-            var pending = false;
-            window.addEventListener('scroll', function () {
-                if (pending) return;
-                pending = true;
-                setTimeout(function () {
-                    pending = false;
-                    try { sessionStorage.setItem('hearts_scroll', String(window.scrollY)); } catch (e) {}
-                }, 200);
-            }, { passive: true });
-        })();
-    </script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+        }
+
+        /* Section snapping, sonara-style, but PROXIMITY not mandatory: proximity
+           only pulls when a snap point is already close, so it can never force a
+           rest position in the middle of a scroll-driven scene.
+
+           Snap points are placed on the discrete sections only (see
+           scroll-snap-align below). The satellite pan and the Earth zoom carry
+           NO snap alignment, so they are never snap targets, and snapping is
+           switched off entirely while either of those scenes is on screen so the
+           continuous satellite-down-to-planet scroll is never interrupted. */
+        html {
+            scroll-snap-type: y proximity;
+        }
+
+        html.snap-off {
+            scroll-snap-type: none;
+        }
+
+        .hero,
+        .content,
+        .video-section,
+        .image-text-section,
+        .numbers-section {
+            scroll-snap-align: start;
         }
 
         body {
@@ -353,108 +354,6 @@
             justify-content: center;
             position: relative;
             z-index: 1; /* Stay above fixed video */
-        }
-
-        /* ---------------------------------------------------------------
-           Section transition language, ported from sonara.now.audio.
-
-           sonara's recipe, verbatim: content starts at opacity 0 /
-           translateY(40px) and transitions both over 900ms with the CSS
-           keyword `ease` (cubic-bezier(.25,.1,.25,1)), toggled by a single
-           IntersectionObserver class at threshold 0.4, no stagger, reversible
-           on scroll back. Under it, a background wash fades over 1500ms - the
-           slower-background / faster-foreground pairing is the only depth cue
-           in the design. Plus 15vh gradient vignettes at each section edge, so
-           content dissolves into the background instead of butting against it.
-
-           Applied ONLY to the static content sections. The satellite pan, the
-           Earth zoom and the volcano video are scroll-driven scenes with tuned
-           pacing and are deliberately untouched. sonara's `scroll-snap-type: y
-           mandatory` is NOT ported - see the note in the report; it would fight
-           those scenes outright.
-           --------------------------------------------------------------- */
-        .content,
-        .image-text-section,
-        .numbers-section {
-            position: relative;
-            overflow: hidden;
-        }
-
-        .content { --section-bg: #1a1a2e; }
-        .image-text-section { --section-bg: #2a2a4e; }
-        .numbers-section { --section-bg: #0f0f1e; }
-
-        .content .content-inner,
-        .image-text-section .image-text-container,
-        .numbers-section .numbers-container {
-            opacity: 0;
-            transform: translateY(40px);
-            transition: opacity 0.9s ease, transform 0.9s ease;
-        }
-
-        .content.in-view .content-inner,
-        .image-text-section.in-view .image-text-container,
-        .numbers-section.in-view .numbers-container {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        /* Slower background wash under the faster content */
-        .content::after,
-        .image-text-section::after,
-        .numbers-section::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 0;
-            opacity: 0;
-            transition: opacity 1.5s ease;
-            background:
-                radial-gradient(ellipse at 20% 30%, rgba(147, 51, 234, 0.07) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 70%, rgba(74, 143, 212, 0.05) 0%, transparent 50%);
-        }
-
-        .content.in-view::after,
-        .image-text-section.in-view::after,
-        .numbers-section.in-view::after {
-            opacity: 1;
-        }
-
-        /* 15vh edge vignettes - the dissolve between sections */
-        .section-vignette {
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 15vh;
-            pointer-events: none;
-            z-index: 2;
-        }
-
-        .section-vignette.top {
-            top: 0;
-            background: linear-gradient(to bottom, var(--section-bg), transparent);
-        }
-
-        .section-vignette.bottom {
-            bottom: 0;
-            background: linear-gradient(to top, var(--section-bg), transparent);
-        }
-
-        /* sonara ships no reduced-motion handling; this closes that gap. */
-        @media (prefers-reduced-motion: reduce) {
-            .content .content-inner,
-            .image-text-section .image-text-container,
-            .numbers-section .numbers-container {
-                transition-duration: 0.01ms;
-                transform: none;
-            }
-
-            .content::after,
-            .image-text-section::after,
-            .numbers-section::after {
-                transition-duration: 0.01ms;
-            }
         }
 
         .numbers-container {
@@ -786,9 +685,8 @@
 
         .video-scroll-indicator {
             position: absolute;
-            /* Sits above the audio control (bottom 44px + 64px tall = 108px),
-               with a 16px gap. */
-            bottom: 124px;
+            /* Sits below the raised audio control. */
+            bottom: 60px;
             left: 50%;
             transform: translateX(-50%);
             opacity: 0;
@@ -863,9 +761,15 @@
                .video-scroll-indicator) so they never collide. */
             position: absolute;
             top: auto;
-            bottom: 44px;
+            /* Raised well clear of the bottom edge - it was jammed against it. */
+            bottom: 15vh;
             left: 50%;
-            transform: translateX(-50%) translateY(30px);
+            /* --ride is driven by scroll so the control travels UP WITH THE PAGE
+               as the next section covers the video, instead of hovering in place.
+               --enter is the one-time settle-in offset. */
+            --enter: 30px;
+            --ride: 0px;
+            transform: translateX(-50%) translateY(calc(var(--enter) + var(--ride)));
             display: flex;
             align-items: center;
             gap: 10px;
@@ -886,7 +790,7 @@
         }
 
         .audio-control.entered {
-            transform: translateX(-50%) translateY(0);
+            --enter: 0px;
         }
 
         /* Visible means interactable: .visible is added at the START of the
@@ -1099,13 +1003,13 @@
             /* Phones: keep it in thumb reach and clear of the iOS Safari
                toolbar and home indicator. */
             .audio-control {
-                bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 13vh);
                 padding: 8px 16px 8px 8px;
             }
 
-            /* Move the scroll hint above the control so they don't collide. */
+            /* Scroll hint sits below the raised control. */
             .video-scroll-indicator {
-                bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
             }
 
             /* Trim the dead scroll after the volcano video. This section is a
@@ -1776,12 +1680,18 @@
                     // tappable. Aligned with the reveal instead of 0.97.
                     earthScrollContainer.style.pointerEvents = earthProgress > 0.77 ? 'none' : '';
 
-                    // Parallax "weight" effect - Earth starts high, settles slowly (heavy feel)
+                    // Parallax "weight" effect - Earth enters high and settles.
+                    //
+                    // Both terms are driven by the SAME clock (section entry).
+                    // They used to run on different clocks - the lift on section
+                    // entry, the settle nudge on zoom progress - and progress
+                    // starts rising while enterRatio is still clamped at 1, so
+                    // the Earth lurched upward (-440 -> -476) before settling.
+                    // That backward jolt is the "jump" on entry. Combined, the
+                    // offset is strictly monotonic from -440 to 0.
                     const enterRatio = Math.max(0, Math.min(1, earthRect.top / viewportHeight));
-                    const weightOffset = enterRatio * -600; // starts 600px above, settles to 0
-                    // Nudge canvas down at start so atmosphere doesn't clip top edge (gone by 33%)
-                    const settleDown = Math.max(0, 1 - earthProgress * 3) * 160;
-                    window.earthViewer.canvas.style.transform = `translateY(${weightOffset + settleDown}px)`;
+                    const enterOffset = enterRatio * -440; // -600 lift + 160 settle, merged
+                    window.earthViewer.canvas.style.transform = `translateY(${enterOffset}px)`;
 
                     // Tilt down during phase 1 (0-0.77): 1.25 → 0.3
                     const tiltProgress = Math.min(1, earthProgress / 0.77);
@@ -1807,11 +1717,38 @@
                     const nextSection = videoSectionEl ? videoSectionEl.nextElementSibling : null;
                     let covered = false;
                     if (nextSection) {
-                        covered = nextSection.getBoundingClientRect().top <= viewportHeight - 130;
+                        const nextTop = nextSection.getBoundingClientRect().top;
+
+                        // Ride up with the page. The video is a fixed layer, so
+                        // the control used to hover in place while everything
+                        // else moved. Once the following section starts covering
+                        // the video, the control is translated 1:1 with it, so it
+                        // slides up and off the screen with the content.
+                        const ride = Math.min(0, nextTop - viewportHeight);
+                        window.setVideoOverlayRide(ride);
+
+                        // By the time the next section fills the viewport the
+                        // control has ridden clear off the top: hide and mute.
+                        covered = nextTop <= 0;
                     } else if (videoSectionEl) {
                         covered = videoSectionEl.getBoundingClientRect().bottom <= 0;
                     }
                     window.setVideoOverlayActive(revealed && !covered);
+                }
+
+                // 5. Suspend snapping while either scroll-driven scene is on
+                // screen. Those containers carry no scroll-snap-align so they are
+                // never snap targets, but without this the video section's snap
+                // point becomes "proximate" during the tail of the Earth zoom and
+                // could yank the reader forward mid-zoom.
+                if (satelliteScrollContainer || earthScrollContainer) {
+                    const overlaps = (el) => {
+                        if (!el) return false;
+                        const r = el.getBoundingClientRect();
+                        return r.bottom > 0 && r.top < viewportHeight;
+                    };
+                    const inScene = overlaps(satelliteScrollContainer) || overlaps(earthScrollContainer);
+                    document.documentElement.classList.toggle('snap-off', inScene);
                 }
 
                 lastScrollY = scrollY;
@@ -1977,6 +1914,16 @@
             // sections. Coming back does NOT auto-unmute - the user has to press
             // the button again, which also keeps WebKit's gesture requirement
             // satisfied.
+            // Scroll-linked vertical offset so the control travels with the page
+            // rather than hovering over it (the video layer is position:fixed).
+            let lastRide = null;
+            window.setVideoOverlayRide = function (px) {
+                const v = Math.round(px);
+                if (v === lastRide) return;
+                lastRide = v;
+                audioControl.style.setProperty('--ride', v + 'px');
+            };
+
             let overlayActive = null; // null so the first call always applies
             let fadeOutTimer = null;
             window.setVideoOverlayActive = function (active) {
@@ -2338,74 +2285,6 @@
                 console.error('EarthViewer not loaded!');
             }
         }
-
-        // Section reveals, ported from sonara.now.audio: one class toggled by one
-        // IntersectionObserver at threshold 0.4, reversible on the way back up.
-        // Only the static content sections - the scroll-driven scenes keep their
-        // own choreography.
-        (function initSectionReveals() {
-            const sections = document.querySelectorAll('.content, .image-text-section, .numbers-section');
-            if (!sections.length) return;
-
-            // The 15vh edge vignettes are injected rather than authored into the
-            // markup so the sections stay clean.
-            sections.forEach(section => {
-                ['top', 'bottom'].forEach(edge => {
-                    const v = document.createElement('div');
-                    v.className = 'section-vignette ' + edge;
-                    v.setAttribute('aria-hidden', 'true');
-                    section.appendChild(v);
-                });
-            });
-
-            if (!('IntersectionObserver' in window)) {
-                sections.forEach(s => s.classList.add('in-view'));
-                return;
-            }
-
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    entry.target.classList.toggle('in-view', entry.isIntersecting);
-                });
-            }, { threshold: 0.4 });
-
-            sections.forEach(s => observer.observe(s));
-        })();
-
-        // Snap a reload to the nearest scene boundary rather than leaving the
-        // reader stranded part-way through a scroll-driven animation. Pairs with
-        // history.scrollRestoration = 'manual' in the head.
-        //
-        // Nearest, not top: reloading inside the volcano section should put you
-        // back at the volcano, not at the hero.
-        function snapToNearestScene() {
-            const saved = window.__heartsSavedScroll;
-            if (saved === null || !isFinite(saved) || saved < 20) return;
-
-            const scenes = Array.from(document.querySelectorAll(
-                'body > section, body > .satellite-scroll-container, body > .earth-scroll-container'
-            ));
-            const tops = scenes.map(el => el.offsetTop).filter(t => isFinite(t));
-            if (!tops.length) return;
-
-            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-            let nearest = tops.reduce((a, b) => Math.abs(b - saved) < Math.abs(a - saved) ? b : a);
-            nearest = Math.max(0, Math.min(maxScroll, nearest));
-
-            window.scrollTo(0, nearest);
-
-            // Drive the scroll-linked state to match the new position right away,
-            // so the Earth zoom / audio control / parallax are correct on the
-            // first frame instead of waiting for the reader to move. If the Earth
-            // scene has not lazily initialized yet, its own init calls this too.
-            if (typeof window.updateEarthZoomFromScroll === 'function') {
-                window.updateEarthZoomFromScroll();
-            }
-        }
-
-        // 'load' rather than DOMContentLoaded: offsetTop values are only reliable
-        // once images and fonts have settled the layout.
-        window.addEventListener('load', snapToNearestScene);
 
         function initSatelliteViewer() {
             const canvas = document.getElementById('satellite-canvas');

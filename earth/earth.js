@@ -7,14 +7,17 @@
 /**
  * Texture sets, sized per texture rather than one resolution per device.
  *
- * Albedo carries the terrain and is the only map the scroll actually zooms
- * into, so it stays at 4096 on BOTH tiers - at 1024 an equirectangular
- * whole-Earth map gives Hawaii only a handful of texels and the island
- * dissolves into blocks at the deepest keyframe. Bump backs up that relief at
- * 2048 everywhere. Clouds/Ocean/NightLights are broad, low-frequency layers
- * that never get magnified the same way, so phones halve them.
+ * Albedo carries the terrain the scroll zooms into, so it runs at the full
+ * 8192 source on BOTH tiers - a whole-Earth equirectangular map gives Hawaii
+ * only a few hundred texels even then. NightLights runs at 4096 on both:
+ * most of the zoom happens over the night side, so it is the texture actually
+ * on screen, and at 1024 it magnified into obvious yellow blocks on a phone.
+ * Bump and Clouds sit at 2048 everywhere; only Ocean (a low-frequency
+ * roughness/metalness map that is never magnified) is halved on phones.
  *
- * Decoded RGBA + mipmaps: desktop ~100MB, phone ~65MB (was ~1378MB).
+ * Decoded RGBA + mipmaps incl. the CSS starfield:
+ * desktop ~260MB, phone ~241MB. It was ~1378MB when iOS Safari was killing
+ * the tab, and the phone budget for this work is 350MB.
  */
 const EARTH_TEXTURE_SETS = {
     hd: {
@@ -22,14 +25,14 @@ const EARTH_TEXTURE_SETS = {
         bump:   'Bump-2048.jpg',
         clouds: 'Clouds-2048.jpg',
         ocean:  'Ocean-2048.jpg',
-        lights: 'NightLights-2048.jpg'
+        lights: 'NightLights-4096.jpg'
     },
     mobile: {
-        albedo: 'Albedo-4096.jpg',
+        albedo: 'Albedo-8192.jpg',
         bump:   'Bump-2048.jpg',
-        clouds: 'Clouds-1024.jpg',
+        clouds: 'Clouds-2048.jpg',
         ocean:  'Ocean-1024.jpg',
-        lights: 'NightLights-1024.jpg'
+        lights: 'NightLights-4096.jpg'
     }
 };
 
@@ -80,8 +83,11 @@ class EarthViewer {
         this.time = 0;
         this.zoomProgress = 0;
 
-        // Camera animation state - start up and right
-        this.cameraStart = new THREE.Vector3(1.2, 1.3, this.config.initialCameraZ);
+        // Camera animation state - start up and right.
+        // cameraStartBase is the authored desktop composition; cameraStart is it
+        // scaled for the current aspect ratio (see applyAspectFraming).
+        this.cameraStartBase = new THREE.Vector3(1.2, 1.3, this.config.initialCameraZ);
+        this.cameraStart = this.cameraStartBase.clone();
         this.cameraEnd = null; // Will be set after calculating Kilauea position
         this.lookAtY = 1.25; // Vertical offset for camera look target (tilt)
     }
@@ -123,7 +129,43 @@ class EarthViewer {
             0.01,
             100
         );
+        this.applyAspectFraming();
         this.camera.position.copy(this.cameraStart);
+    }
+
+    /**
+     * Widen the opening shot on narrow viewports.
+     *
+     * A perspective camera with a fixed VERTICAL fov shows less and less
+     * horizontally as the viewport narrows, so on a phone the globe overflowed
+     * the frame badly at the start of the zoom - you could not tell what you
+     * were approaching. This pulls the START camera back until the globe
+     * subtends the same fraction of the frame width that it does at the
+     * authored desktop aspect. The END of the zoom is untouched, so the
+     * destination is identical - the journey is just longer on a phone.
+     *
+     * At the reference aspect the scale is exactly 1, so desktop is unchanged.
+     */
+    applyAspectFraming() {
+        const REFERENCE_ASPECT = 1.6; // the desktop composition this was tuned at
+        const aspect = window.innerWidth / window.innerHeight;
+        const vHalf = (this.camera.fov / 2) * Math.PI / 180;
+
+        const halfWidthAngle = Math.atan(Math.tan(vHalf) * aspect);
+        const refHalfWidthAngle = Math.atan(Math.tan(vHalf) * REFERENCE_ASPECT);
+
+        const baseDist = this.cameraStartBase.length();
+        const r = this.config.earthRadius;
+        // How much of the frame half-width the globe fills at the reference aspect
+        const refFraction = Math.asin(Math.min(1, r / baseDist)) / refHalfWidthAngle;
+
+        const targetAngle = Math.min(refFraction * halfWidthAngle, Math.PI / 2 - 1e-3);
+        const targetDist = r / Math.sin(targetAngle);
+
+        // Never move closer than the authored start - only ever pull back.
+        const scale = Math.max(1, targetDist / baseDist);
+        this.startFramingScale = scale;
+        this.cameraStart.copy(this.cameraStartBase).multiplyScalar(scale);
     }
 
     setupRenderer() {
@@ -164,12 +206,25 @@ class EarthViewer {
         manager.onLoad = () => {
             console.log('Earth textures loaded');
             this.texturesReady = true;
-            // Apply current zoom progress before first render
+
+            // Pre-warm before the first visible frame. The scene is built and
+            // rendered while the canvas is still at opacity 0, and the page is
+            // asked to push the CURRENT scroll-derived state in first, so the
+            // very first frame the reader sees already matches where they are.
+            // Without this the first paint used a stale zoomProgress and the
+            // Earth visibly jumped on the next scroll event.
+            if (typeof window.updateEarthZoomFromScroll === 'function') {
+                window.updateEarthZoomFromScroll();
+            }
             this.setZoomProgress(this.zoomProgress);
-            // Render one frame immediately so GPU has content ready
+
+            // Render offscreen (opacity still 0), then reveal on the next frame
+            // so the compositor never shows a half-built or mispositioned Earth.
             this.renderer.render(this.scene, this.camera);
-            // Fade in the canvas
-            this.canvas.style.opacity = '1';
+            requestAnimationFrame(() => {
+                this.renderer.render(this.scene, this.camera);
+                this.canvas.style.opacity = '1';
+            });
         };
 
         const loader = new THREE.TextureLoader(manager);
@@ -461,6 +516,10 @@ class EarthViewer {
             this.camera.aspect = window.innerWidth / window.innerHeight;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(window.innerWidth, window.innerHeight);
+            // Re-frame for the new aspect (phone rotation) and re-apply progress
+            // so the camera does not stay at a position computed for the old one.
+            this.applyAspectFraming();
+            this.setZoomProgress(this.zoomProgress);
         });
     }
 
