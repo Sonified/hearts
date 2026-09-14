@@ -33,6 +33,12 @@
            continuous satellite-down-to-planet scroll is never interrupted. */
         html {
             scroll-snap-type: y proximity;
+            /* The document has no trailing space - scrollHeight matches the last
+               section's bottom edge exactly. What used to appear past the end was
+               rubber-band overscroll exposing the fixed video/starfield layers
+               that sit behind the flow content at z-index 0. Stop the bounce and
+               the page ends cleanly on the last section. */
+            overscroll-behavior-y: none;
         }
 
         html.snap-off {
@@ -52,6 +58,8 @@
             overflow-x: hidden;
             background: #000;
             color: #fff;
+            /* iOS honours this on body rather than html in some versions */
+            overscroll-behavior-y: none;
         }
 
         .hero {
@@ -764,12 +772,9 @@
             /* Raised well clear of the bottom edge - it was jammed against it. */
             bottom: 15vh;
             left: 50%;
-            /* --ride is driven by scroll so the control travels UP WITH THE PAGE
-               as the next section covers the video, instead of hovering in place.
-               --enter is the one-time settle-in offset. */
-            --enter: 30px;
-            --ride: 0px;
-            transform: translateX(-50%) translateY(calc(var(--enter) + var(--ride)));
+            /* Sits still over the video. The only movement is the one-time
+               settle-in when it appears (see .entered). */
+            transform: translateX(-50%) translateY(30px);
             display: flex;
             align-items: center;
             gap: 10px;
@@ -790,7 +795,7 @@
         }
 
         .audio-control.entered {
-            --enter: 0px;
+            transform: translateX(-50%) translateY(0);
         }
 
         /* Visible means interactable: .visible is added at the START of the
@@ -1719,17 +1724,11 @@
                     if (nextSection) {
                         const nextTop = nextSection.getBoundingClientRect().top;
 
-                        // Ride up with the page. The video is a fixed layer, so
-                        // the control used to hover in place while everything
-                        // else moved. Once the following section starts covering
-                        // the video, the control is translated 1:1 with it, so it
-                        // slides up and off the screen with the content.
-                        const ride = Math.min(0, nextTop - viewportHeight);
-                        window.setVideoOverlayRide(ride);
-
-                        // By the time the next section fills the viewport the
-                        // control has ridden clear off the top: hide and mute.
-                        covered = nextTop <= 0;
+                        // The control sits still over the video, so hide it just
+                        // before the following section reaches it rather than
+                        // letting it be buried. It occupies roughly the bottom
+                        // 200px; this triggers a little above that.
+                        covered = nextTop <= viewportHeight - 160;
                     } else if (videoSectionEl) {
                         covered = videoSectionEl.getBoundingClientRect().bottom <= 0;
                     }
@@ -1914,16 +1913,6 @@
             // sections. Coming back does NOT auto-unmute - the user has to press
             // the button again, which also keeps WebKit's gesture requirement
             // satisfied.
-            // Scroll-linked vertical offset so the control travels with the page
-            // rather than hovering over it (the video layer is position:fixed).
-            let lastRide = null;
-            window.setVideoOverlayRide = function (px) {
-                const v = Math.round(px);
-                if (v === lastRide) return;
-                lastRide = v;
-                audioControl.style.setProperty('--ride', v + 'px');
-            };
-
             let overlayActive = null; // null so the first call always applies
             let fadeOutTimer = null;
             window.setVideoOverlayActive = function (active) {
