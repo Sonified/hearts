@@ -37,6 +37,13 @@ const EARTH_TEXTURE_SETS = {
 };
 
 /**
+ * Opening tilt of the Earth camera, shared with index.html's scroll handler so
+ * the start value and the ramp that decays it cannot drift apart.
+ */
+const EARTH_LOOK_AT_Y_START = 0.55;
+const EARTH_LOOK_AT_Y_END = 0.13;
+
+/**
  * Pick a texture tier by device class.
  * Kept deliberately dumb: viewport width OR a mobile UA string.
  */
@@ -53,7 +60,6 @@ class EarthViewer {
         this.config = {
             canvasId: 'earth-canvas',
             containerId: 'earthScrollContainer',
-            labelId: 'earthLabel',
             texturesPath: 'earth/textures/',
             earthRadius: 1,
             atmosphereRadius: 1.25, // Franky uses 12.5 for Earth radius 10 = 1.25x
@@ -89,7 +95,22 @@ class EarthViewer {
         this.cameraStartBase = new THREE.Vector3(1.2, 1.3, this.config.initialCameraZ);
         this.cameraStart = this.cameraStartBase.clone();
         this.cameraEnd = null; // Will be set after calculating Kilauea position
-        this.lookAtY = 1.25; // Vertical offset for camera look target (tilt)
+        // Vertical offset of the camera's look target, in world units.
+        //
+        // This is the opening composition, and it is now a resting frame: the
+        // deck's continuous scene starts at zoom progress 0 and the reader sits
+        // there. It used to be 1.25, which aims the camera well ABOVE the globe
+        // and pushes the planet almost entirely below the bottom of the frame -
+        // on a 900px desktop viewport the crown of the Earth landed around
+        // y=623, leaving two thirds of the screen as empty space. That was
+        // survivable only because the old scroll mapping entered the scene
+        // around 44% of the way through the zoom, so nobody ever saw it.
+        // 0.55 keeps the same downward tilt and the same settle, but frames the
+        // planet filling the lower screen with the limb arcing through the
+        // upper third. Because the offset is in world units and the phone
+        // camera starts ~3x further back (see applyAspectFraming), its effect
+        // scales down there automatically and the globe sits near centred.
+        this.lookAtY = EARTH_LOOK_AT_Y_START;
     }
 
     init() {
@@ -103,7 +124,6 @@ class EarthViewer {
         this.canvas = canvas;
         this.canvas.style.opacity = '0'; // Hidden until textures loaded
         this.container = container;
-        this.label = document.getElementById(this.config.labelId);
         this.videoFixed = document.getElementById('videoFixed');
         this.texturesReady = false;
 
@@ -388,11 +408,6 @@ class EarthViewer {
 
         // Calculate camera end position (toward Kilauea)
         this.calculateCameraEndPosition();
-
-        // Show label initially
-        if (this.label) {
-            this.label.classList.add('visible');
-        }
     }
 
     latLonToVector3(lat, lon, radius) {
@@ -450,26 +465,22 @@ class EarthViewer {
             this.camera.lookAt(new THREE.Vector3(0, 0, 0));
         }
 
-        // Label visibility
-        if (this.label) {
-            if (progress < 0.10) {
-                this.label.classList.add('visible');
-            } else {
-                this.label.classList.remove('visible');
-            }
-        }
-
-        // Crossfade to the video. The window is sized so the fade FINISHES just
-        // before progress 1, which is the pixel the video beat's snap point sits
-        // on - the reader arrives at the beat with the handover already done
-        // rather than completing it during the next gesture.
+        // Crossfade to the video.
+        //
+        // The window ends at 0.82, not at 1.0, and that is deliberate: the deck
+        // takes the last 0.35 of a viewport of this scene back as snap runway
+        // so the video beat can actually be landed on (see SCENE_EXIT_LEAD in
+        // index.html, which arms at progress 0.825). The handover therefore has
+        // to be COMPLETE before that point - the reader must arrive at the
+        // video beat with the crossfade already finished, not be carried
+        // through the middle of it by a snap animation.
         //
         // setZoomProgress is the sole owner of this canvas's opacity. Nothing
         // else may write it: a direct opacity = '1' anywhere else is what pinned
         // a washed-out fully-zoomed Earth over the video on a mid-page reload.
         if (this.texturesReady) {
-            const FADE_FROM = 0.80;
-            const FADE_TO = 0.97;
+            const FADE_FROM = 0.58;
+            const FADE_TO = 0.82;
             if (progress > FADE_FROM) {
                 const f = Math.min(1, (progress - FADE_FROM) / (FADE_TO - FADE_FROM));
                 this.canvas.style.opacity = 1 - f;
@@ -570,3 +581,5 @@ class EarthViewer {
 
 // Export to window for global access
 window.EarthViewer = EarthViewer;
+window.EARTH_LOOK_AT_Y_START = EARTH_LOOK_AT_Y_START;
+window.EARTH_LOOK_AT_Y_END = EARTH_LOOK_AT_Y_END;

@@ -1202,21 +1202,6 @@
             transition: opacity 0.3s ease;
         }
 
-        .earth-label {
-            position: absolute;
-            bottom: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            text-align: center;
-            z-index: 10;
-            opacity: 0;
-            transition: opacity 0.5s ease;
-        }
-
-        .earth-label.visible {
-            opacity: 1;
-        }
-
         /* Earth debug controls - hidden in production, shown with ?debug=1 */
         .earth-debug-controls {
             display: none;
@@ -1284,31 +1269,6 @@
             display: block;
         }
 
-        .earth-label h3 {
-            font-size: 2rem;
-            font-weight: 600;
-            margin-bottom: 10px;
-            letter-spacing: -0.02em;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
-        }
-
-        .earth-label p {
-            font-size: 1.1rem;
-            color: #a0a0a0;
-            max-width: 600px;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
-        }
-
-        @media (max-width: 768px) {
-            .earth-label h3 {
-                font-size: 1.5rem;
-            }
-
-            .earth-label p {
-                font-size: 1rem;
-                max-width: 90%;
-            }
-        }
     </style>
 </head>
 <body>
@@ -1369,10 +1329,11 @@
     <div class="earth-scroll-container" id="earthScrollContainer">
         <div class="earth-sticky">
             <canvas id="earth-canvas"></canvas>
-            <div class="earth-label" id="earthLabel">
-                <h3>Earth</h3>
-                <p>Real-time connection between space weather and terrestrial phenomena.</p>
-            </div>
+            <!-- No caption over the Earth. There used to be an "Earth" heading
+                 and subtitle here; it was invisible in practice because the
+                 scene never rested near zoom progress 0, and once the deck gave
+                 the scene a real first frame it appeared. It is gone rather
+                 than restyled - the planet arriving needs no label. -->
             <!-- Debug controls: hidden by default, add ?debug=1 to the URL to show -->
             <div class="earth-debug-controls" id="earthDebugControls">
                 <h4>Layers</h4>
@@ -1386,8 +1347,8 @@
                     <input type="range" id="sliderX" min="-2" max="3" step="0.05" value="1.2">
                     <div class="slider-label"><span>Zoom (Z)</span><span class="slider-value" id="zValue">1.00</span></div>
                     <input type="range" id="sliderZ" min="1.0" max="5" step="0.05" value="1.0">
-                    <div class="slider-label"><span>Look Y (tilt)</span><span class="slider-value" id="lookYValue">1.25</span></div>
-                    <input type="range" id="sliderLookY" min="-2" max="3" step="0.05" value="1.25">
+                    <div class="slider-label"><span>Look Y (tilt)</span><span class="slider-value" id="lookYValue">0.55</span></div>
+                    <input type="range" id="sliderLookY" min="-2" max="3" step="0.05" value="0.55">
                 </div>
             </div>
         </div>
@@ -1763,7 +1724,12 @@
             // Earth and the crossfade begins. Shared with earth.js so the reveal,
             // the pointer-events hand-off and the audio control all key off one
             // number instead of three copies of 0.77 drifting apart.
-            const VIDEO_REVEAL = 0.70;
+            //
+            // Sits just under earth.js's FADE_FROM (0.58), so the video is lit
+            // the instant the Earth starts dissolving, and the whole handover
+            // is finished by 0.82 - before the deck reclaims the tail as snap
+            // runway at 0.825.
+            const VIDEO_REVEAL = 0.55;
             const EARTH_PHASE_SPLIT = 0.72;
             window.HEARTS_VIDEO_REVEAL = VIDEO_REVEAL;
 
@@ -1884,8 +1850,12 @@
                         }
 
                         // Camera tilt levels out across leg 1 of the zoom.
+                        // Endpoints live in earth.js so the opening composition
+                        // is defined in exactly one place.
+                        const y0 = window.EARTH_LOOK_AT_Y_START;
+                        const y1 = window.EARTH_LOOK_AT_Y_END;
                         const tilt = Math.min(1, earthProgress / EARTH_PHASE_SPLIT);
-                        viewer.lookAtY = 1.25 - tilt * 0.95;
+                        viewer.lookAtY = y0 - tilt * (y0 - y1);
                     }
 
                     // 4. Audio control visibility mirrors "the video is the
@@ -1936,6 +1906,13 @@
                 sceneEnd = earthTop + (earthScrollContainer.offsetHeight - window.innerHeight);
             }
 
+            // How much runway the deck gets back before the end of the scene,
+            // in viewports. See applySnapState.
+            const SCENE_EXIT_LEAD = 0.35;
+
+            let lastSnapY = 0;
+            let lastDir = 0;
+
             // hintDelta lets an input event arm the right state BEFORE the
             // browser has a chance to start a snap it would then have to fight:
             // a downward flick while resting exactly on BEAT 2 suspends
@@ -1943,11 +1920,54 @@
             // the video beat does the same.
             function applySnapState(scrollY, hintDelta) {
                 if (!earthScrollContainer) return;
+
+                const dir = hintDelta || (scrollY - lastSnapY);
+                if (dir) lastDir = dir;
+                lastSnapY = scrollY;
+
                 let inScene = scrollY > sceneStart + 1 && scrollY < sceneEnd - 1;
+
+                // THE EXIT.
+                //
+                // Handing the deck back on the scene's final pixel did not
+                // work, and this is why: scroll-snap-stop: always only binds a
+                // gesture that BEGAN with the container snapping. A descent out
+                // of the scene starts while snap-type is none, so by the time
+                // the video beat's snap point arrived there was no armed snap
+                // container to catch it - momentum simply carried through to
+                // the section below and the video was skipped. That is exactly
+                // the "too easy to scroll past the lava, too hard to land on
+                // it" report.
+                //
+                // So the deck takes over a third of a viewport early, but only
+                // while DESCENDING. By that point the crossfade to the video
+                // has finished (earth.js fades out by progress 0.82, and this
+                // arms at 0.825), so the scene has nothing left to scrub - that
+                // tail was going to be dead scroll anyway. Now it is the runway
+                // the snap engine needs: the nearest snap point is the video
+                // beat a third of a viewport ahead, the next one is a full
+                // viewport beyond that, and scroll-snap-stop: always is finally
+                // in force to stop the pass-over.
+                //
+                // Strictly one-directional. Arming it on the way UP would pull
+                // the reader back down onto the video the moment they tried to
+                // leave it, which is the pull-back this whole rebuild exists to
+                // get rid of. Climbing out of the video beat keeps snapping
+                // suspended all the way back to BEAT 2, where the deck re-arms
+                // on a point the reader is already standing on.
+                if (inScene && lastDir > 0 &&
+                    scrollY >= sceneEnd - window.innerHeight * SCENE_EXIT_LEAD) {
+                    inScene = false;
+                }
+
+                // THE ENTRY, and the reverse of the exit: pre-empt at the
+                // boundaries so no snap is ever started that would have to be
+                // cancelled a frame later.
                 if (!inScene && hintDelta) {
                     if (hintDelta > 0 && Math.abs(scrollY - sceneStart) <= 2) inScene = true;
                     if (hintDelta < 0 && Math.abs(scrollY - sceneEnd) <= 2) inScene = true;
                 }
+
                 document.documentElement.classList.toggle('snap-off', inScene);
             }
 
