@@ -15,6 +15,30 @@
       device-appropriate tier (hd/ vs mobile/) is chosen at runtime - preloading
       here would pull down the wrong set and hold it in memory from first paint.
     -->
+    <script>
+        // Reloading used to strand the reader mid-animation, part-way through a
+        // scroll-driven scene. Disable the browser's own restore and remember the
+        // position ourselves, so the load handler can snap to the NEAREST scene
+        // boundary instead (see snapToNearestScene). Must run before first paint.
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        try {
+            var __heartsSaved = sessionStorage.getItem('hearts_scroll');
+            window.__heartsSavedScroll = __heartsSaved === null ? null : parseFloat(__heartsSaved);
+        } catch (e) {
+            window.__heartsSavedScroll = null;
+        }
+        (function () {
+            var pending = false;
+            window.addEventListener('scroll', function () {
+                if (pending) return;
+                pending = true;
+                setTimeout(function () {
+                    pending = false;
+                    try { sessionStorage.setItem('hearts_scroll', String(window.scrollY)); } catch (e) {}
+                }, 200);
+            }, { passive: true });
+        })();
+    </script>
     <style>
         * {
             margin: 0;
@@ -331,6 +355,108 @@
             z-index: 1; /* Stay above fixed video */
         }
 
+        /* ---------------------------------------------------------------
+           Section transition language, ported from sonara.now.audio.
+
+           sonara's recipe, verbatim: content starts at opacity 0 /
+           translateY(40px) and transitions both over 900ms with the CSS
+           keyword `ease` (cubic-bezier(.25,.1,.25,1)), toggled by a single
+           IntersectionObserver class at threshold 0.4, no stagger, reversible
+           on scroll back. Under it, a background wash fades over 1500ms - the
+           slower-background / faster-foreground pairing is the only depth cue
+           in the design. Plus 15vh gradient vignettes at each section edge, so
+           content dissolves into the background instead of butting against it.
+
+           Applied ONLY to the static content sections. The satellite pan, the
+           Earth zoom and the volcano video are scroll-driven scenes with tuned
+           pacing and are deliberately untouched. sonara's `scroll-snap-type: y
+           mandatory` is NOT ported - see the note in the report; it would fight
+           those scenes outright.
+           --------------------------------------------------------------- */
+        .content,
+        .image-text-section,
+        .numbers-section {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .content { --section-bg: #1a1a2e; }
+        .image-text-section { --section-bg: #2a2a4e; }
+        .numbers-section { --section-bg: #0f0f1e; }
+
+        .content .content-inner,
+        .image-text-section .image-text-container,
+        .numbers-section .numbers-container {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 0.9s ease, transform 0.9s ease;
+        }
+
+        .content.in-view .content-inner,
+        .image-text-section.in-view .image-text-container,
+        .numbers-section.in-view .numbers-container {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Slower background wash under the faster content */
+        .content::after,
+        .image-text-section::after,
+        .numbers-section::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0;
+            transition: opacity 1.5s ease;
+            background:
+                radial-gradient(ellipse at 20% 30%, rgba(147, 51, 234, 0.07) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(74, 143, 212, 0.05) 0%, transparent 50%);
+        }
+
+        .content.in-view::after,
+        .image-text-section.in-view::after,
+        .numbers-section.in-view::after {
+            opacity: 1;
+        }
+
+        /* 15vh edge vignettes - the dissolve between sections */
+        .section-vignette {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 15vh;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .section-vignette.top {
+            top: 0;
+            background: linear-gradient(to bottom, var(--section-bg), transparent);
+        }
+
+        .section-vignette.bottom {
+            bottom: 0;
+            background: linear-gradient(to top, var(--section-bg), transparent);
+        }
+
+        /* sonara ships no reduced-motion handling; this closes that gap. */
+        @media (prefers-reduced-motion: reduce) {
+            .content .content-inner,
+            .image-text-section .image-text-container,
+            .numbers-section .numbers-container {
+                transition-duration: 0.01ms;
+                transform: none;
+            }
+
+            .content::after,
+            .image-text-section::after,
+            .numbers-section::after {
+                transition-duration: 0.01ms;
+            }
+        }
+
         .numbers-container {
             max-width: 900px;
             margin: 0 auto;
@@ -612,6 +738,9 @@
             position: relative;
             z-index: 1;
             height: 100vh;
+            /* Empty spacer that sits above the fixed video layer. Without this
+               it would swallow every click aimed at the audio control below it. */
+            pointer-events: none;
         }
 
         .video-fixed {
@@ -728,11 +857,11 @@
            off late in the scroll. Fixed positioning here reproduces the old
            geometry exactly (.video-fixed was a full-viewport fixed box). */
         .audio-control {
-            position: fixed;
-            /* Bottom-anchored on every breakpoint so it sits in easy reach
-               rather than floating in the middle of the video. The scroll hint
-               is moved above it (see .video-scroll-indicator) so they never
-               collide. */
+            /* Absolute inside .video-fixed, so it is pinned to the VIDEO's
+               bottom edge and travels with the video layer rather than being
+               glued to the viewport. The scroll hint sits above it (see
+               .video-scroll-indicator) so they never collide. */
+            position: absolute;
             top: auto;
             bottom: 44px;
             left: 50%;
@@ -1222,6 +1351,29 @@
         <div class="video-overlay-sequence">
             <div class="overlay-context" id="overlayContext">December 6, 2024: Mt. Kīlauea erupts with 1,000-foot lava fountains.</div>
         </div>
+        <!-- Audio control: a child of .video-fixed so it is anchored to the
+             video's bottom edge and shares the video's stacking - it is
+             occluded by later sections exactly as the video is, instead of
+             floating over the whole page. The z-index trap this used to hit
+             is avoided by .earth-scroll-container and .video-section both
+             dropping pointer-events while the video is showing. -->
+        <div class="audio-control" id="audioControl">
+            <button class="audio-toggle" id="audioToggle" type="button" aria-label="Unmute video" aria-pressed="false">
+                <span class="speaker-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                    </svg>
+                    <span class="speaker-mute-x" id="speakerMuteX">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+                            <line x1="2" y1="2" x2="22" y2="22"/>
+                        </svg>
+                    </span>
+                </span>
+            </button>
+            <input class="volume-slider" id="volumeSlider" type="range"
+                   min="0" max="1" step="0.01" value="0.5"
+                   aria-label="Volume">
+        </div>
         <!-- Arrow only: the "Live data feed" caption was removed because there
              is no live data feed. The chevron still cues scrolling. -->
         <div class="video-scroll-indicator" id="videoScrollIndicator">
@@ -1229,26 +1381,6 @@
         </div>
     </div>
 
-    <!-- Audio control. Deliberately a sibling of .video-fixed, not a child:
-         .video-fixed is z-index 0 and .earth-scroll-container is z-index 1, so
-         nesting it there buried the control under the Earth canvas. -->
-    <div class="audio-control" id="audioControl">
-        <button class="audio-toggle" id="audioToggle" type="button" aria-label="Unmute video" aria-pressed="false">
-            <span class="speaker-icon">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-                </svg>
-                <span class="speaker-mute-x" id="speakerMuteX">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
-                        <line x1="2" y1="2" x2="22" y2="22"/>
-                    </svg>
-                </span>
-            </span>
-        </button>
-        <input class="volume-slider" id="volumeSlider" type="range"
-               min="0" max="1" step="0.01" value="0.5"
-               aria-label="Volume">
-    </div>
 
     <!-- Spacer section for video viewing time before next content -->
     <section class="video-section" id="videoSection"></section>
@@ -1667,10 +1799,19 @@
                     const eProgress = Math.max(0, Math.min(1,
                         (viewportHeight - eRect.top + viewportHeight * 0.2) / eRect.height));
                     const revealed = eProgress > 0.77;
-                    // Scrolled beyond the video section into later content
-                    const vsRect = videoSectionEl ? videoSectionEl.getBoundingClientRect() : null;
-                    const pastVideo = vsRect ? vsRect.bottom <= 0 : false;
-                    window.setVideoOverlayActive(revealed && !pastVideo);
+                    // The control is pinned to the video, which is a fixed layer
+                    // that later sections scroll over. Hide it once the next
+                    // section reaches it, rather than waiting for the video
+                    // spacer to leave - on phones that spacer is short, so the
+                    // control would otherwise sit buried under later content.
+                    const nextSection = videoSectionEl ? videoSectionEl.nextElementSibling : null;
+                    let covered = false;
+                    if (nextSection) {
+                        covered = nextSection.getBoundingClientRect().top <= viewportHeight - 130;
+                    } else if (videoSectionEl) {
+                        covered = videoSectionEl.getBoundingClientRect().bottom <= 0;
+                    }
+                    window.setVideoOverlayActive(revealed && !covered);
                 }
 
                 lastScrollY = scrollY;
@@ -1844,6 +1985,11 @@
                 overlayActive = active;
                 clearTimeout(fadeOutTimer);
                 if (active) {
+                    // The control is a child of .video-fixed now, so the parent
+                    // must be lit or the control inherits opacity 0 while still
+                    // accepting clicks. earth.js also sets this at 0.77; doing it
+                    // here makes it deterministic regardless of init order.
+                    if (videoFixed) videoFixed.classList.add('visible');
                     // .visible restores pointer-events: auto (see CSS)
                     audioControl.classList.remove('fading-out');
                     audioControl.classList.add('entered', 'visible');
@@ -2192,6 +2338,74 @@
                 console.error('EarthViewer not loaded!');
             }
         }
+
+        // Section reveals, ported from sonara.now.audio: one class toggled by one
+        // IntersectionObserver at threshold 0.4, reversible on the way back up.
+        // Only the static content sections - the scroll-driven scenes keep their
+        // own choreography.
+        (function initSectionReveals() {
+            const sections = document.querySelectorAll('.content, .image-text-section, .numbers-section');
+            if (!sections.length) return;
+
+            // The 15vh edge vignettes are injected rather than authored into the
+            // markup so the sections stay clean.
+            sections.forEach(section => {
+                ['top', 'bottom'].forEach(edge => {
+                    const v = document.createElement('div');
+                    v.className = 'section-vignette ' + edge;
+                    v.setAttribute('aria-hidden', 'true');
+                    section.appendChild(v);
+                });
+            });
+
+            if (!('IntersectionObserver' in window)) {
+                sections.forEach(s => s.classList.add('in-view'));
+                return;
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    entry.target.classList.toggle('in-view', entry.isIntersecting);
+                });
+            }, { threshold: 0.4 });
+
+            sections.forEach(s => observer.observe(s));
+        })();
+
+        // Snap a reload to the nearest scene boundary rather than leaving the
+        // reader stranded part-way through a scroll-driven animation. Pairs with
+        // history.scrollRestoration = 'manual' in the head.
+        //
+        // Nearest, not top: reloading inside the volcano section should put you
+        // back at the volcano, not at the hero.
+        function snapToNearestScene() {
+            const saved = window.__heartsSavedScroll;
+            if (saved === null || !isFinite(saved) || saved < 20) return;
+
+            const scenes = Array.from(document.querySelectorAll(
+                'body > section, body > .satellite-scroll-container, body > .earth-scroll-container'
+            ));
+            const tops = scenes.map(el => el.offsetTop).filter(t => isFinite(t));
+            if (!tops.length) return;
+
+            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+            let nearest = tops.reduce((a, b) => Math.abs(b - saved) < Math.abs(a - saved) ? b : a);
+            nearest = Math.max(0, Math.min(maxScroll, nearest));
+
+            window.scrollTo(0, nearest);
+
+            // Drive the scroll-linked state to match the new position right away,
+            // so the Earth zoom / audio control / parallax are correct on the
+            // first frame instead of waiting for the reader to move. If the Earth
+            // scene has not lazily initialized yet, its own init calls this too.
+            if (typeof window.updateEarthZoomFromScroll === 'function') {
+                window.updateEarthZoomFromScroll();
+            }
+        }
+
+        // 'load' rather than DOMContentLoaded: offsetTop values are only reliable
+        // once images and fonts have settled the layout.
+        window.addEventListener('load', snapToNearestScene);
 
         function initSatelliteViewer() {
             const canvas = document.getElementById('satellite-canvas');
