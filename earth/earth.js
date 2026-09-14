@@ -467,33 +467,34 @@ class EarthViewer {
 
         // Crossfade to the video.
         //
-        // The window ends at 0.82, not at 1.0, and that is deliberate: the deck
-        // takes the last 0.35 of a viewport of this scene back as snap runway
-        // so the video beat can actually be landed on (see SCENE_EXIT_LEAD in
-        // index.html, which arms at progress 0.825). The handover therefore has
-        // to be COMPLETE before that point - the reader must arrive at the
-        // video beat with the crossfade already finished, not be carried
-        // through the middle of it by a snap animation.
+        // The window is specified in index.html (window.HEARTS_CROSSFADE) next
+        // to the snap runway it has to clear, because the two numbers constrain
+        // each other: the fade must COMPLETE before the deck reclaims the tail
+        // at progress 0.875, or the reader is carried through the middle of the
+        // handover by a snap animation. It also must not START before the spin
+        // onto the islands has settled at ~0.6775, or the video dissolves in
+        // while the globe is still rotating.
         //
         // setZoomProgress is the sole owner of this canvas's opacity. Nothing
         // else may write it: a direct opacity = '1' anywhere else is what pinned
         // a washed-out fully-zoomed Earth over the video on a mid-page reload.
+        const xf = window.HEARTS_CROSSFADE || { from: 0.725, to: 0.865, layerOn: 0.66 };
+
         if (this.texturesReady) {
-            const FADE_FROM = 0.58;
-            const FADE_TO = 0.82;
-            if (progress > FADE_FROM) {
-                const f = Math.min(1, (progress - FADE_FROM) / (FADE_TO - FADE_FROM));
+            if (progress > xf.from) {
+                const f = Math.min(1, (progress - xf.from) / (xf.to - xf.from));
                 this.canvas.style.opacity = 1 - f;
             } else {
                 this.canvas.style.opacity = 1;
             }
         }
 
-        // Show video behind Earth as it fades.
-        const reveal = (typeof window.HEARTS_VIDEO_REVEAL === 'number')
-            ? window.HEARTS_VIDEO_REVEAL : 0.70;
+        // Light the video layer BEFORE the fade starts. It is still completely
+        // hidden behind an opaque Earth at this point; the head start exists so
+        // the .visible class's own 0.5s CSS fade is finished before the Earth
+        // begins to dissolve, and so the element is already playing.
         if (this.videoFixed) {
-            if (progress > reveal) {
+            if (progress > xf.layerOn) {
                 this.videoFixed.classList.add('visible');
                 if (!this.videoOverlayTriggered) {
                     this.videoOverlayTriggered = true;

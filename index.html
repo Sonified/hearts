@@ -810,16 +810,46 @@
             cursor: pointer;
             z-index: 3;
             text-align: center;
-            transition: opacity 0.5s ease;
+            /* Gentle arrival - it is a quiet hint, not an alert. */
+            transition: opacity 1.2s ease;
         }
 
         .video-scroll-indicator.visible {
             opacity: 1;
-            animation: bounce 1s ease-in-out infinite;
         }
 
+        /* A quieter arrow than the hero's: ~25px on the diagonal instead of
+           ~42px, with the border thinned to match so it stays the same weight
+           of line relative to its size. */
         .video-scroll-indicator .chevron {
             margin: 0 auto;
+            width: 18px;
+            height: 18px;
+            border-left-width: 2px;
+            border-bottom-width: 2px;
+        }
+
+        /* The motion lives on the CHEVRON, not the wrapper.
+           The wrapper owns the fade-in (a transition on opacity); if the
+           animation also drove opacity there it would win over the transition
+           and the hint would snap into view instead of easing in. Nesting them
+           lets the two multiply: a slow breath inside a slow fade. */
+        .video-scroll-indicator.visible .chevron {
+            animation: hintBreathe 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+        }
+
+        /* Half the old speed and half the old travel, on a sine-like curve so
+           it drifts rather than bounces. The opacity swing is what makes it
+           read as breathing instead of sliding. */
+        @keyframes hintBreathe {
+            0%, 100% {
+                transform: translateY(0) rotate(-45deg);
+                opacity: 0.55;
+            }
+            50% {
+                transform: translateY(-7px) rotate(-45deg);
+                opacity: 1;
+            }
         }
 
         /* Cinematic overlay sequence */
@@ -1720,18 +1750,50 @@
             const earthScrollContainer = document.getElementById('earthScrollContainer');
             const videoSectionEl = document.getElementById('videoSection');
 
-            // Zoom progress at which the volcano video is switched on behind the
-            // Earth and the crossfade begins. Shared with earth.js so the reveal,
-            // the pointer-events hand-off and the audio control all key off one
-            // number instead of three copies of 0.77 drifting apart.
+            // THE HANDOVER TO THE VOLCANO VIDEO, in zoom progress.
             //
-            // Sits just under earth.js's FADE_FROM (0.58), so the video is lit
-            // the instant the Earth starts dissolving, and the whole handover
-            // is finished by 0.82 - before the deck reclaims the tail as snap
-            // runway at 0.825.
-            const VIDEO_REVEAL = 0.55;
+            // All of it is anchored to one fact about the scene's timeline: the
+            // globe's spin onto the Hawaiian islands finishes exactly when the
+            // eased clock reaches PATH_SPLIT (0.72 in earth.js). easeZoom is
+            // 0.45t + 0.55*smoothstep(t), and solving that for 0.72 puts the end
+            // of the spin at progress ~0.6775. Everything below sits AFTER that
+            // number, deliberately: the islands rotate into frame and settle,
+            // the camera starts dropping onto them, and only then does the
+            // video take over. A crossfade that starts mid-rotation reads as a
+            // mistake; a late, quick one reads as intent.
+            //
+            //   0.660  video layer switched on and playing, still completely
+            //          hidden behind an opaque Earth. Early only so the .visible
+            //          class's 0.5s CSS fade is long finished before anything
+            //          dissolves - otherwise a fast scroll can catch the layer
+            //          still fading up and show a dark gap mid-crossfade.
+            //   0.6775 the spin ends; the islands are framed. Nothing fades yet.
+            //   0.725  crossfade STARTS - about 9.5vh of scroll into the final
+            //          descent, so the drop toward the islands is established
+            //          before the Earth begins to dissolve.
+            //   0.790  the video is the content: Earth stops taking clicks and
+            //          the audio control begins its fade-in, at roughly 46%
+            //          through the crossfade.
+            //   0.865  crossfade COMPLETE.
+            //   0.875  the deck reclaims the tail as snap runway
+            //          (SCENE_EXIT_LEAD). The handover must be finished before
+            //          this or the reader gets carried through the middle of it
+            //          by a snap animation, which is the bug fixed last round.
+            //
+            // The window is 0.14 of progress = 28vh of scroll: shorter and later
+            // than the 0.58-0.82 it replaces.
+            const CROSSFADE_FROM = 0.725;
+            const CROSSFADE_TO = 0.865;
+            const VIDEO_LAYER_ON = 0.66;
+            const VIDEO_REVEAL = 0.79;
             const EARTH_PHASE_SPLIT = 0.72;
-            window.HEARTS_VIDEO_REVEAL = VIDEO_REVEAL;
+            // earth.js owns the canvas opacity but reads its window from here,
+            // so the whole handover is specified in one place.
+            window.HEARTS_CROSSFADE = {
+                from: CROSSFADE_FROM,
+                to: CROSSFADE_TO,
+                layerOn: VIDEO_LAYER_ON
+            };
 
             const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -1908,7 +1970,14 @@
 
             // How much runway the deck gets back before the end of the scene,
             // in viewports. See applySnapState.
-            const SCENE_EXIT_LEAD = 0.35;
+            //
+            // 0.25, down from 0.35. The zoom owns two viewports, so this arms
+            // the deck at zoom progress 1 - 0.25/2 = 0.875, and every tenth of a
+            // viewport spent here is a tenth the crossfade cannot use. Landing
+            // on the video beat became reliable at 0.35, so a tenth of it is
+            // spent back on letting the handover start later - after the globe
+            // has finished rotating onto the islands - rather than earlier.
+            const SCENE_EXIT_LEAD = 0.25;
 
             let lastSnapY = 0;
             let lastDir = 0;
@@ -1939,10 +2008,10 @@
                 // the "too easy to scroll past the lava, too hard to land on
                 // it" report.
                 //
-                // So the deck takes over a third of a viewport early, but only
+                // So the deck takes a quarter of a viewport early, but only
                 // while DESCENDING. By that point the crossfade to the video
-                // has finished (earth.js fades out by progress 0.82, and this
-                // arms at 0.825), so the scene has nothing left to scrub - that
+                // has finished (it completes at progress 0.865, and this arms
+                // at 0.875), so the scene has nothing left to scrub - that
                 // tail was going to be dead scroll anyway. Now it is the runway
                 // the snap engine needs: the nearest snap point is the video
                 // beat a third of a viewport ahead, the next one is a full
@@ -2339,27 +2408,78 @@
         })();
         */
 
-        // Video section scroll indicator - appears after 3 seconds
+        // Video section scroll indicator - appears once the volcano has played
+        // through in full.
+        //
+        // The hint's job is "you have seen this; there is more below", so it
+        // must not interrupt the first viewing. The video is `loop`, and `ended`
+        // never fires on looping media, so a full pass is detected by watching
+        // for currentTime jumping BACKWARDS - the wrap. The clock starts when
+        // the section comes into view, so arriving mid-playback still buys a
+        // complete pass of the footage (the tail, then the head) before the
+        // arrow shows.
         (function initVideoScrollIndicator() {
             const videoSection = document.getElementById('videoSection');
             const videoScrollIndicator = document.getElementById('videoScrollIndicator');
+            const video = document.getElementById('kilaueavideo');
             if (!videoSection || !videoScrollIndicator) return;
 
-            let showTimeout = null;
+            // A backwards jump this large can only be a loop wrap; ordinary
+            // timeupdate steps are ~0.25s forward.
+            const WRAP_JUMP = 0.5;
+            // Last resort, in case the video never plays at all (iOS Low Power
+            // Mode refuses autoplay, and then timeupdate never fires). The hint
+            // should not be lost forever just because the footage is stalled.
+            const FALLBACK_MS = 25000;
+
+            let watching = false;
+            let passComplete = false;
+            let lastTime = 0;
+            let fallbackTimer = null;
+
+            function reveal() {
+                passComplete = true;
+                stopWatching();
+                videoScrollIndicator.classList.add('visible');
+            }
+
+            function onTimeUpdate() {
+                const t = video.currentTime;
+                if (t + WRAP_JUMP < lastTime) {
+                    reveal();
+                    return;
+                }
+                lastTime = t;
+            }
+
+            function startWatching() {
+                if (watching || !video) return;
+                watching = true;
+                lastTime = video.currentTime;
+                video.addEventListener('timeupdate', onTimeUpdate);
+                fallbackTimer = setTimeout(reveal, FALLBACK_MS);
+            }
+
+            function stopWatching() {
+                if (!watching) return;
+                watching = false;
+                video.removeEventListener('timeupdate', onTimeUpdate);
+                clearTimeout(fallbackTimer);
+                fallbackTimer = null;
+            }
 
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
-                        // Start 10 second timer when section becomes visible
-                        showTimeout = setTimeout(() => {
+                        if (passComplete) {
+                            // Already earned on an earlier visit - don't make
+                            // the reader sit through it twice.
                             videoScrollIndicator.classList.add('visible');
-                        }, 10000);
-                    } else {
-                        // Clear timer and hide if section leaves view
-                        if (showTimeout) {
-                            clearTimeout(showTimeout);
-                            showTimeout = null;
+                        } else {
+                            startWatching();
                         }
+                    } else {
+                        stopWatching();
                         videoScrollIndicator.classList.remove('visible');
                     }
                 });
